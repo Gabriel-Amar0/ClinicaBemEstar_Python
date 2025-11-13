@@ -5,6 +5,10 @@
   --cinza: #6C757D;
 }
 
+html, body {
+  overflow-x: hidden;
+}
+
 /* Estilo geral do body (painel) */
 body {
   margin: 0;
