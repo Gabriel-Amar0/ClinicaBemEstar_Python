@@ -22,7 +22,6 @@ O sistema inclui:
 * Controle de acesso e validação dos dados inseridos
 * Layout simples e intuitivo, com foco na funcionalidade e clareza
 
-> **Observação:** Este projeto foi desenvolvido com fins educacionais para estudo de autenticação e rotas em Flask.
 
 ---
 
