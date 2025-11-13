@@ -10,6 +10,9 @@ app.secret_key = 'troque-esta-chave-por-uma-segura'
 DB_PATH = os.path.join(os.path.dirname(__file__), 'data', 'db.json')
 
 
+# ========================
+# BANCO DE DADOS LOCAL (JSON)
+# ========================
 def init_db():
     if not os.path.exists(os.path.dirname(DB_PATH)):
         os.makedirs(os.path.dirname(DB_PATH))
@@ -34,6 +37,9 @@ def write_db(data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
+# ========================
+# AUTENTICAÇÃO
+# ========================
 def login_required(role=None):
     def decorator(f):
         @wraps(f)
@@ -86,6 +92,9 @@ def logout():
     return redirect(url_for('login'))
 
 
+# ========================
+# PÁGINAS
+# ========================
 @app.route('/medico')
 @login_required(role='Medico')
 def medico():
@@ -98,23 +107,36 @@ def atendente():
     return render_template('atendente.html', user=session['user'])
 
 
+# ========================
+# MÉDICOS
+# ========================
 @app.route('/api/medicos', methods=['GET'])
 def api_medicos():
     db = read_db()
     return jsonify(db['medicos'])
 
 
+# ========================
+# PACIENTES
+# ========================
 @app.route('/api/pacientes', methods=['GET', 'POST'])
 def api_pacientes():
     db = read_db()
+
     if request.method == 'GET':
         return jsonify(db['pacientes'])
+
     data = request.json
+    cpf_limpo = data.get('cpf', '').replace('.', '').replace('-', '')
+
+    # Impedir duplicação de CPF
+    if any(p['cpf'] == cpf_limpo for p in db['pacientes']):
+        return jsonify({"message": "CPF já cadastrado"}), 400
+
     paciente = {
         "id": db['next_ids']['paciente'],
         "nome": data.get('nome'),
-        # remove pontos e traços do CPF antes de salvar
-        "cpf": data.get('cpf', '').replace('.', '').replace('-', ''),
+        "cpf": cpf_limpo,
         "nascimento": data.get('nascimento'),
         "telefone": data.get('telefone'),
         "endereco": data.get('endereco'),
@@ -127,6 +149,32 @@ def api_pacientes():
     return jsonify(paciente), 201
 
 
+@app.route('/api/pacientes/<int:pid>', methods=['PUT', 'DELETE'])
+def api_paciente_update(pid):
+    db = read_db()
+    paciente = next((p for p in db['pacientes'] if p['id'] == pid), None)
+
+    if not paciente:
+        return jsonify({"message": "Paciente não encontrado"}), 404
+
+    if request.method == 'DELETE':
+        db['pacientes'] = [p for p in db['pacientes'] if p['id'] != pid]
+        write_db(db)
+        return jsonify({"ok": True})
+
+    # Atualização (PUT)
+    data = request.json
+    for campo in ['nome', 'cpf', 'nascimento', 'telefone', 'endereco', 'peso', 'altura']:
+        if campo in data and data[campo] is not None:
+            paciente[campo] = data[campo]
+
+    write_db(db)
+    return jsonify(paciente)
+
+
+# ========================
+# CONSULTAS
+# ========================
 @app.route('/api/consultas', methods=['GET', 'POST'])
 def api_consultas():
     db = read_db()
@@ -142,6 +190,7 @@ def api_consultas():
                 "medico_nome": medico.get('nome')
             })
         return jsonify(consultas_exp)
+
     data = request.json
     consulta = {
         "id": db['next_ids']['consulta'],
@@ -163,11 +212,15 @@ def api_consulta_update(cid):
     consulta = next((c for c in db['consultas'] if c['id'] == cid), None)
     if not consulta:
         return jsonify({"message": "Consulta não encontrada"}), 404
+
     if request.method == 'DELETE':
         db['consultas'] = [c for c in db['consultas'] if c['id'] != cid]
         write_db(db)
         return jsonify({"ok": True})
+
+    # Atualização (PUT)
     data = request.json
+   
     consulta['datahora'] = data.get('datahora', consulta['datahora'])
     consulta['observacoes'] = data.get('observacoes', consulta['observacoes'])
     consulta['status'] = data.get('status', consulta['status'])
@@ -175,6 +228,9 @@ def api_consulta_update(cid):
     return jsonify(consulta)
 
 
+# ========================
+# EXECUÇÃO
+# ========================
 if __name__ == '__main__':
     init_db()
     app.run(debug=True)

@@ -7,14 +7,15 @@ document.addEventListener('DOMContentLoaded', function() {
   const toast = toastEl ? new bootstrap.Toast(toastEl) : null;
 
   function mostrarToast(mensagem, tipo = 'success') {
-    if (!toastEl || !toastBody) return alert(mensagem); // fallback se algo estiver errado
+    if (!toastEl || !toastBody) return alert(mensagem); // fallback
+    // preservar classes úteis e garantir apenas mudança do tema
     toastEl.className = `toast align-items-center text-bg-${tipo} border-0`;
     toastBody.textContent = mensagem;
     toast.show();
   }
 
   // ============================
-  // LOGIN
+  // LOGIN (mantive seu código)
   // ============================
   const roleAtendente = document.getElementById('roleAtendente');
   const roleMedico = document.getElementById('roleMedico');
@@ -95,23 +96,210 @@ document.addEventListener('DOMContentLoaded', function() {
     const formEditar = document.getElementById('formEditar');
     let consultaEditando = null;
 
-    async function loadPacientes() {
-      const res = await fetch('/api/pacientes');
-      const pacs = await res.json();
-      selectPaciente.innerHTML = '';
-      pacs.forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = p.cpf;
-        opt.textContent = `${p.nome} (CPF: ${p.cpf})`;
-        selectPaciente.appendChild(opt);
+    // ====== Config paginação ======
+    const ITEMS_PER_PAGE = 5;
+    let consultasCache = []; // cache local para checagens e paginação
+    let pacientesCache = [];
+    let consultasPage = 1;
+
+    // criar modal de pacientes dinamicamente (para não alterar HTML)
+    function criarModalPacientes() {
+      if (document.getElementById('modalPacientes')) return;
+      const modalHtml = `
+      <div class="modal fade" id="modalPacientes" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+              <h5 class="modal-title">Pacientes Cadastrados</h5>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div id="listaPacientesContainer" class="table-responsive">
+                <!-- tabela injetada por JS -->
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+      document.body.insertAdjacentHTML('beforeend', modalHtml);
+    }
+
+    // injetar botão "Ver Pacientes" abaixo do form de cadastro (sem alterar HTML original)
+    function inserirBotaoVerPacientes() {
+      const existing = document.getElementById('btnVerPacientes');
+      if (existing) return;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.id = 'btnVerPacientes';
+      btn.className = 'btn btn-outline-primary mt-3';
+      btn.textContent = 'Ver Pacientes';
+      // adiciona logo abaixo do formulário (antes do close container)
+      formCadastro.appendChild(btn);
+      btn.addEventListener('click', () => {
+        criarModalPacientes();
+        montarTabelaPacientes();
+        const modal = new bootstrap.Modal(document.getElementById('modalPacientes'), {
+          backdrop: 'static',
+          keyboard: false
+        });
+        modal.show();
       });
     }
 
-    async function loadConsultas() {
-      const res = await fetch('/api/consultas');
-      const consultas = await res.json();
+    // carrega pacientes do servidor e popula select e cache
+    async function loadPacientes() {
+      try {
+        const res = await fetch('/api/pacientes');
+        const pacs = await res.json();
+        pacientesCache = pacs || [];
+        selectPaciente.innerHTML = '<option value="" selected disabled>Selecione</option>';
+        pacs.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p.cpf;
+          opt.textContent = `${p.nome} (CPF: ${p.cpf})`;
+          selectPaciente.appendChild(opt);
+        });
+      } catch (err) {
+        console.error('Erro ao carregar pacientes:', err);
+      }
+    }
+
+    // montar tabela de pacientes dentro do modal
+    function montarTabelaPacientes() {
+      const container = document.getElementById('listaPacientesContainer');
+      if (!container) return;
+      const rows = pacientesCache.map(p => {
+        return `
+        <tr data-cpf="${p.cpf}">
+          <td>${p.nome}</td>
+          <td>${p.cpf}</td>
+          <td>${p.telefone || ''}</td>
+          <td>${p.nascimento || ''}</td>
+          <td>
+            <button class="btn btn-sm btn-primary btn-edit-paciente" data-cpf="${p.cpf}">Editar</button>
+            <button class="btn btn-sm btn-danger btn-delete-paciente" data-cpf="${p.cpf}">Excluir</button>
+          </td>
+        </tr>`;
+      }).join('');
+
+      container.innerHTML = `
+        <table class="table table-striped">
+          <thead>
+            <tr><th>Nome</th><th>CPF</th><th>Contato</th><th>Nascimento</th><th>Ações</th></tr>
+          </thead>
+          <tbody>
+            ${rows || '<tr><td colspan="5" class="text-center">Nenhum paciente cadastrado</td></tr>'}
+          </tbody>
+        </table>
+      `;
+
+      // anexar listeners para editar/excluir
+      container.querySelectorAll('.btn-delete-paciente').forEach(btn => {
+        btn.addEventListener('click', async (ev) => {
+          const cpf = ev.currentTarget.dataset.cpf;
+          if (!confirm('Confirma exclusão do paciente? Isso também pode afetar consultas vinculadas.')) return;
+          try {
+            const res = await fetch(`/api/pacientes/${encodeURIComponent(cpf)}`, { method: 'DELETE' });
+            if (res.ok) {
+              mostrarToast('Paciente excluído com sucesso!', 'success');
+              await atualizarTudoImediato();
+            } else {
+              mostrarToast('Erro ao excluir paciente', 'danger');
+            }
+          } catch (err) {
+            console.error(err);
+            mostrarToast('Erro ao excluir paciente', 'danger');
+          }
+        });
+      });
+
+      container.querySelectorAll('.btn-edit-paciente').forEach(btn => {
+        btn.addEventListener('click', (ev) => {
+          const cpf = ev.currentTarget.dataset.cpf;
+          const paciente = pacientesCache.find(p => p.cpf === cpf);
+          if (!paciente) return;
+          abrirModalEditarPaciente(paciente);
+        });
+      });
+    }
+
+    // cria modal de edição de paciente (reutilizável)
+    function abrirModalEditarPaciente(paciente) {
+      // se já existe, apenas preencher e mostrar
+      if (!document.getElementById('modalEditarPaciente')) {
+        
+
+        // adicionar submit handler
+        document.getElementById('formEditarPaciente').addEventListener('submit', async (ev) => {
+          ev.preventDefault();
+          const cpf = document.getElementById('edit-paciente-cpf').value;
+          const payload = {
+            nome: document.getElementById('edit-paciente-nome').value,
+            nascimento: document.getElementById('edit-paciente-nasc').value,
+            telefone: document.getElementById('edit-paciente-telefone').value,
+            endereco: document.getElementById('edit-paciente-endereco').value,
+            peso: document.getElementById('edit-paciente-peso').value,
+            altura: document.getElementById('edit-paciente-altura').value
+          };
+          try {
+            const res = await fetch(`/api/pacientes/${encodeURIComponent(cpf)}`, {
+              method: 'PUT',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify(payload)
+            });
+            if (res.ok) {
+              mostrarToast('Paciente atualizado!', 'success');
+              const modalInst = bootstrap.Modal.getInstance(document.getElementById('modalEditarPaciente'));
+              modalInst.hide();
+              await atualizarTudoImediato();
+            } else {
+              mostrarToast('Erro ao atualizar paciente', 'danger');
+            }
+          } catch (err) {
+            console.error(err);
+            mostrarToast('Erro ao atualizar paciente', 'danger');
+          }
+        });
+      }
+
+      // preencher campos e abrir modal
+      document.getElementById('edit-paciente-nome').value = paciente.nome || '';
+      document.getElementById('edit-paciente-cpf').value = paciente.cpf || '';
+      document.getElementById('edit-paciente-nasc').value = paciente.nascimento || '';
+      document.getElementById('edit-paciente-telefone').value = paciente.telefone || '';
+      document.getElementById('edit-paciente-endereco').value = paciente.endereco || '';
+      document.getElementById('edit-paciente-peso').value = paciente.peso || '';
+      document.getElementById('edit-paciente-altura').value = paciente.altura || '';
+
+      const modal = new bootstrap.Modal(document.getElementById('modalEditarPaciente'), {
+        backdrop: 'static',
+        keyboard: false
+      });
+      modal.show();
+    }
+
+    // carregar consultas do servidor e popular tabela com paginação
+    async function loadConsultas(page = 1) {
+      try {
+        const res = await fetch('/api/consultas');
+        const consultas = await res.json();
+        consultasCache = consultas || [];
+        consultasPage = page;
+        renderConsultasPage();
+      } catch (err) {
+        console.error('Erro ao carregar consultas:', err);
+      }
+    }
+
+    function renderConsultasPage() {
       tabelaConsultasBody.innerHTML = '';
-      consultas.forEach(c => {
+      const start = (consultasPage - 1) * ITEMS_PER_PAGE;
+      const pageItems = consultasCache.slice(start, start + ITEMS_PER_PAGE);
+
+      pageItems.forEach(c => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>${c.id}</td>
@@ -119,7 +307,7 @@ document.addEventListener('DOMContentLoaded', function() {
           <td>${c.paciente_nome || ''}</td>
           <td>${c.paciente_contato || ''}</td>
           <td>${c.cpf}</td>
-          <td>${c.datahora}</td>
+          <td>${formataDataHoraParaExibir(c.datahora)}</td>
           <td>${c.observacoes}</td>
           <td>${c.status}</td>
           <td>
@@ -129,6 +317,59 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
         tabelaConsultasBody.appendChild(tr);
       });
+
+      // pager (simples)
+      const tableWrapper = document.getElementById('tabelaConsultas').parentElement;
+      let pager = document.getElementById('consultasPager');
+      if (pager) pager.remove();
+      pager = document.createElement('div');
+      pager.id = 'consultasPager';
+      pager.className = 'd-flex justify-content-between align-items-center mt-2';
+      const totalPages = Math.max(1, Math.ceil(consultasCache.length / ITEMS_PER_PAGE));
+      pager.innerHTML = `
+        <div>Mostrando ${Math.min(consultasCache.length, start + 1)} - ${Math.min(consultasCache.length, start + pageItems.length)} de ${consultasCache.length}</div>
+        <div>
+          <button class="btn btn-sm btn-outline-secondary me-1" id="prevPage" ${consultasPage <= 1 ? 'disabled' : ''}>Anterior</button>
+          <span class="mx-2">Página ${consultasPage} / ${totalPages}</span>
+          <button class="btn btn-sm btn-outline-secondary ms-1" id="nextPage" ${consultasPage >= totalPages ? 'disabled' : ''}>Próxima</button>
+        </div>
+      `;
+      tableWrapper.parentElement.appendChild(pager);
+
+      document.getElementById('prevPage').addEventListener('click', () => {
+        if (consultasPage > 1) {
+          consultasPage--;
+          renderConsultasPage();
+        }
+      });
+      document.getElementById('nextPage').addEventListener('click', () => {
+        if (consultasPage < totalPages) {
+          consultasPage++;
+          renderConsultasPage();
+        }
+      });
+    }
+
+    // formata datahora para exibição legível (tenta aceitar ISO ou já formatado)
+    function formataDataHoraParaExibir(datahora) {
+      // se vier no formato 'YYYY-MM-DDTHH:mm' ou 'YYYY-MM-DD HH:mm:SS' etc.
+      if (!datahora) return '';
+      // tentar converter ISO-like em local string sem alterar timezone (assumindo backend entrega local)
+      try {
+        // se já contém 'T', criar Date
+        const t = datahora.includes('T') ? datahora : datahora.replace(' ', 'T');
+        const dt = new Date(t);
+        if (!isNaN(dt.getTime())) {
+          // dd/mm/yyyy hh:mm
+          const dd = String(dt.getDate()).padStart(2, '0');
+          const mm = String(dt.getMonth()+1).padStart(2, '0');
+          const yyyy = dt.getFullYear();
+          const hh = String(dt.getHours()).padStart(2, '0');
+          const min = String(dt.getMinutes()).padStart(2, '0');
+          return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+        }
+      } catch (err) { /* ignore */ }
+      return datahora;
     }
 
     // Cadastrar paciente
@@ -143,21 +384,27 @@ document.addEventListener('DOMContentLoaded', function() {
         peso: document.getElementById('paciente-peso').value,
         altura: document.getElementById('paciente-altura').value
       };
-      const res = await fetch('/api/pacientes', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(paciente)
-      });
-      if (res.ok) {
-        await loadPacientes();
-        mostrarToast('Paciente cadastrado com sucesso!', 'success');
-        formCadastro.reset();
-      } else {
+      try {
+        const res = await fetch('/api/pacientes', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(paciente)
+        });
+        if (res.ok) {
+          await atualizarTudoImediato();
+          mostrarToast('Paciente cadastrado com sucesso!', 'success');
+          formCadastro.reset();
+        } else {
+          const json = await res.json().catch(()=>({}));
+          mostrarToast(json.message || 'Erro ao cadastrar paciente', 'danger');
+        }
+      } catch (err) {
+        console.error(err);
         mostrarToast('Erro ao cadastrar paciente', 'danger');
       }
     });
 
-    // Agendar consulta
+    // Agendar consulta com verificação de conflito
     formAgendar.addEventListener('submit', async (e) => {
       e.preventDefault();
       const consulta = {
@@ -166,30 +413,83 @@ document.addEventListener('DOMContentLoaded', function() {
         observacoes: document.getElementById('form-obs').value,
         medico_id: document.getElementById('form-medico').value
       };
-      const res = await fetch('/api/consultas', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(consulta)
+
+      // validação básica
+      if (!consulta.cpf || !consulta.datahora || !consulta.medico_id) {
+        mostrarToast('Preencha todos os campos', 'warning');
+        return;
+      }
+
+      // checar conflitos localmente (com cache)
+      const conflito = consultasCache.some(c => {
+        // comparar mesmo medico e mesma data/hora (string compare)
+        return String(c.medico_id) === String(consulta.medico_id) && normalizeDateTime(c.datahora) === normalizeDateTime(consulta.datahora);
       });
-      if (res.ok) {
-        await loadConsultas();
-        mostrarToast('Consulta agendada com sucesso!', 'success');
-        formAgendar.reset();
-      } else {
+
+      if (conflito) {
+        mostrarToast('Já existe uma consulta agendada para esse médico nesse horário.', 'warning');
+        return;
+      }
+
+      // enviar
+      try {
+        const res = await fetch('/api/consultas', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(consulta)
+        });
+        if (res.ok) {
+          await atualizarTudoImediato();
+          mostrarToast('Consulta agendada com sucesso!', 'success');
+          formAgendar.reset();
+        } else {
+          const json = await res.json().catch(()=>({}));
+          mostrarToast(json.message || 'Erro ao agendar consulta', 'danger');
+        }
+      } catch (err) {
+        console.error(err);
         mostrarToast('Erro ao agendar consulta', 'danger');
       }
     });
 
-    // Editar e excluir consulta
+    // normaliza datetime para comparação: tenta reduzir formatos diferentes
+    function normalizeDateTime(d) {
+      if (!d) return '';
+      // se for ISO com T, usar prefix yyyy-mm-ddTHH:MM (sem segundos)
+      try {
+        if (typeof d !== 'string') d = String(d);
+        if (d.includes('T')) {
+          return d.slice(0,16);
+        }
+        // converter "dd/mm/yyyy hh:mm" possivelmente vindo de exibição
+        if (d.includes('/')) {
+          const parts = d.split(' ');
+          const date = parts[0].split('/');
+          const time = (parts[1]||'00:00').slice(0,5);
+          return `${date[2]}-${date[1]}-${date[0]}T${time}`;
+        }
+        // fallback: take first 16 chars
+        return d.slice(0,16);
+      } catch (err) {
+        return d.slice(0,16);
+      }
+    }
+
+    // Editar e excluir consulta (delegado)
     tabelaConsultasBody.addEventListener('click', async (e) => {
       if (e.target.classList.contains('btn-delete')) {
         const id = e.target.dataset.id;
         if (!confirm('Confirma exclusão?')) return;
-        const res = await fetch(`/api/consultas/${id}`, { method: 'DELETE' });
-        if (res.ok) {
-          await loadConsultas();
-          mostrarToast('Consulta excluída com sucesso!', 'success');
-        } else {
+        try {
+          const res = await fetch(`/api/consultas/${id}`, { method: 'DELETE' });
+          if (res.ok) {
+            await atualizarTudoImediato();
+            mostrarToast('Consulta excluída com sucesso!', 'success');
+          } else {
+            mostrarToast('Erro ao excluir consulta', 'danger');
+          }
+        } catch (err) {
+          console.error(err);
           mostrarToast('Erro ao excluir consulta', 'danger');
         }
       }
@@ -197,15 +497,27 @@ document.addEventListener('DOMContentLoaded', function() {
       if (e.target.classList.contains('btn-edit')) {
         const id = e.target.dataset.id;
         consultaEditando = id;
-        const res = await fetch('/api/consultas');
-        const consultas = await res.json();
-        const c = consultas.find(x => x.id == id);
+        // buscar a consulta no cache
+        const c = consultasCache.find(x => String(x.id) === String(id));
         if (!c) return;
 
         document.getElementById('edit-nome').value = c.paciente_nome || '';
         document.getElementById('edit-contato').value = c.paciente_contato || '';
         document.getElementById('edit-cpf').value = c.cpf;
-        document.getElementById('edit-datahora').value = c.datahora;
+        // colocar datahora em input adequado (se possível)
+        const editDataInput = document.getElementById('edit-datahora');
+        // preferimos datetime-local; se input for text, tentamos manter formato legível
+        try {
+          // converte para yyyy-mm-ddThh:mm (valor aceito por datetime-local)
+          const normalized = normalizeDateTime(c.datahora);
+          if (editDataInput.type === 'text') {
+            editDataInput.value = c.datahora;
+          } else {
+            editDataInput.value = normalized;
+          }
+        } catch (err) {
+          editDataInput.value = c.datahora;
+        }
         document.getElementById('edit-obs').value = c.observacoes;
         document.getElementById('edit-status').value = c.status;
 
@@ -217,33 +529,79 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
 
-    // Salvar edição
+    // Salvar edição de consulta com checagem de conflito (se datahora mudou)
     formEditar.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (!consultaEditando) return;
       const dados = {
-        datahora: document.getElementById('edit-datahora').value,
-        observacoes: document.getElementById('edit-obs').value,
-        status: document.getElementById('edit-status').value
+     nome: document.getElementById('edit-nome').value,
+    cpf: document.getElementById('edit-cpf').value,
+    paciente_contato: document.getElementById('edit-contato').value,
+    datahora: document.getElementById('edit-datahora').value,
+    observacoes: document.getElementById('edit-obs').value,
+    status: document.getElementById('edit-status').value
       };
-      const res = await fetch(`/api/consultas/${consultaEditando}`, {
-        method: 'PUT',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(dados)
+
+      // verificar conflito: se novo horário coincide com outro agendamento do mesmo médico (exceto a própria consulta)
+      const consultaOriginal = consultasCache.find(c => String(c.id) === String(consultaEditando));
+      const medicoId = consultaOriginal ? String(consultaOriginal.medico_id) : null;
+      const novoNormalized = normalizeDateTime(dados.datahora);
+
+      const conflito = consultasCache.some(c => {
+        if (String(c.id) === String(consultaEditando)) return false;
+        return String(c.medico_id) === medicoId && normalizeDateTime(c.datahora) === novoNormalized;
       });
-      if (res.ok) {
-        await loadConsultas();
-        consultaEditando = null;
-        const modal = bootstrap.Modal.getInstance(document.getElementById('modalEditar'));
-        modal.hide();
-        mostrarToast('Consulta atualizada com sucesso!', 'info');
-      } else {
+
+      if (conflito) {
+        mostrarToast('Conflito: outro agendamento já existe para esse médico neste horário.', 'warning');
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/consultas/${consultaEditando}`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(dados)
+        });
+        if (res.ok) {
+          await atualizarTudoImediato();
+          consultaEditando = null;
+          const modal = bootstrap.Modal.getInstance(document.getElementById('modalEditar'));
+          if (modal) modal.hide();
+          mostrarToast('Consulta atualizada com sucesso!', 'info');
+        } else {
+          mostrarToast('Erro ao atualizar consulta', 'danger');
+        }
+      } catch (err) {
+        console.error(err);
         mostrarToast('Erro ao atualizar consulta', 'danger');
       }
     });
 
-    // Carregar dados iniciais
-    loadPacientes();
-    loadConsultas();
+    // Atualiza pacientes e consultas imediatamente (usado pós-op)
+    async function atualizarTudoImediato() {
+      await Promise.all([loadPacientes(), loadConsultas(consultasPage)]);
+      montarTabelaPacientes();
+    }
+
+   
+
+    // converter o input de edit-datahora pra datetime-local se possível (melhora UX)
+    (function ajustarInputEditDataHora() {
+      const input = document.getElementById('edit-datahora');
+      if (input) {
+        try {
+          input.type = 'datetime-local';
+        } catch (err) { /* ignore */ }
+      }
+    })();
+
+    // função utilitária: iniciar tudo
+    (async function init() {
+      inserirBotaoVerPacientes();
+      await Promise.all([loadPacientes(), loadConsultas(1)]);
+      montarTabelaPacientes();
+      iniciarPolling();
+    })();
   }
 });
