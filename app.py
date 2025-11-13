@@ -15,11 +15,7 @@ def init_db():
         os.makedirs(os.path.dirname(DB_PATH))
     if not os.path.isfile(DB_PATH):
         initial = {
-            "medicos": [
-                {"id": 1, "nome": "Dr. João Silva", "email": "medico@email", "senha": "123"},
-                {"id": 2, "nome": "Dra. Maria Oliveira", "email": "maria@med.com", "senha": "123"},
-                {"id": 3, "nome": "Dr. Carlos Pereira", "email": "carlos@med.com", "senha": "123"}
-            ],
+            "medicos": [],
             "pacientes": [],
             "consultas": [],
             "next_ids": {"paciente": 1, "consulta": 1}
