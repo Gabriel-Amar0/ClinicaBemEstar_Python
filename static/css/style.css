@@ -1,0 +1,166 @@
+:root {
+  --azul-claro: #E8F1FA;
+  --azul: #3A8DFF;
+  --azul-forte: #0056B3;
+  --cinza: #6C757D;
+}
+
+/* Estilo geral do body (painel) */
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: 'Poppins', sans-serif;
+  background: url('../img/backgroundd.jpg') no-repeat center center fixed;
+  background-size: cover;
+  display: flex;
+  align-items: flex-start; 
+  justify-content: center;
+  padding-top: 6vh; 
+}
+
+/* Centralização apenas para login */
+body.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-top: 0; /* remove espaço extra do topo para login */
+}
+
+/* Login */
+.login-wrapper {
+  width: 100%;
+  max-width: 420px;
+  z-index: 1;
+}
+
+/* Logo login */
+.login-logo {
+  width: 135px;
+  border-radius: 50%;
+}
+
+/* Botões de seleção de função */
+.role-selection .btn {
+  border-radius: 0.75rem;
+  font-weight: 500;
+  padding: 8px 16px;
+}
+
+.role-selection .btn:hover {
+  background-color: var(--azul);
+  color: #fff;
+}
+
+.active-role {
+  background-color: var(--azul);
+  color: #fff !important;
+}
+
+form#loginForm {
+  max-width: 300px; 
+  margin: 0 auto;
+}
+
+.form-control {
+  border-radius: 0.6rem;
+  padding: 10px 12px;
+  box-shadow: none;
+}
+
+/* Botão principal */
+.btn-primary {
+  background-color: var(--azul);
+  border: none;
+  border-radius: 0.6rem;
+  padding: 10px 0;
+  font-weight: 600;
+}
+
+.btn-primary:hover {
+  background-color: var(--azul-forte);
+  transform: none;
+}
+
+/* Links */
+a.text-secondary:hover {
+  color: var(--azul-forte) !important;
+}
+
+/* Responsivo */
+@media (max-width: 480px) {
+  .login-box { padding: 20px 18px; }
+  .login-logo { width: 65px; }
+  form#loginForm { max-width: 90%; }
+}
+
+/* Cabeçalho do painel */
+.header-painel {
+  width: 100%;
+  background-color: #ffffffd8;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1rem;
+  height: 70px;
+}
+
+.logo-header {
+  width: 60px;
+  border-radius: 50%;
+}
+
+.nav-link {
+  font-weight: 500;
+  color: var(--azul);
+  text-decoration: none;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+.nav-link:hover {
+  color: var(--azul-forte);
+}
+
+.nav-link.active {
+  color: var(--azul-forte);
+  font-weight: 700;
+  background-color: var(--azul-claro);
+}
+
+/* Transição suave das seções */
+.conteudo-secao {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+  position: relative;
+}
+
+.conteudo-secao.escondido {
+  opacity: 0;
+  transform: translateY(20px);
+  pointer-events: none;
+  position: absolute;
+  width: 100%;
+}
+
+/* Logo + nome da clínica no painel */
+.header-painel .d-flex.align-items-center.gap-3 > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* Espaço topo para o painel */
+body:not(.login-page) {
+  padding-top: 90px !important;
+}
+
+/* Links ativos */
+.nav-link.active {
+  background-color: var(--azul-claro);
+}

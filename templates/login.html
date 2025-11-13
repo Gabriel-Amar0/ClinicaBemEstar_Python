@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Clínica Bem Estar</title>
+
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="login-page">
+  <div class="login-wrapper">
+    <div class="login-box text-center">
+      <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Logo Clínica" class="login-logo mb-2">
+      <h3 class="fw-bold text-primary mb-1">Clínica Bem Estar</h3>
+      <p class="text-muted small mb-3">Cuidando da sua saúde com atenção e confiança.</p>
+
+      <!-- Seleção de função na tela de login -->
+      <div class="role-selection mb-3">
+        <button type="button" class="btn btn-outline-primary me-2" id="roleAtendente">Sou Atendente</button>
+        <button type="button" class="btn btn-outline-primary" id="roleMedico">Sou Médico</button>
+      </div>
+
+      <!-- Formulário de login -->
+      <form id="loginForm" class="mx-auto">
+        <div class="form-floating mb-3">
+          <input type="email" class="form-control" id="email" placeholder="E-mail" required>
+          <label for="email">E-mail</label>
+        </div>
+
+        <div class="form-floating mb-3">
+          <input type="password" class="form-control" id="senha" placeholder="Senha" required>
+          <label for="senha">Senha</label>
+        </div>
+
+        <button type="submit" class="btn btn-primary w-100">Entrar</button>
+
+        <div class="text-center mt-2">
+          <a href="#" class="text-secondary small text-decoration-none" data-bs-toggle="modal" data-bs-target="#suporteModal">Esqueceu sua senha?</a>
+        </div>
+      </form>
+
+      <div class="text-center mt-4">
+        <small class="text-muted">© 2025 Clínica Bem Estar</small>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de suporte -->
+  <div class="modal fade" id="suporteModal" tabindex="-1" aria-labelledby="suporteModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content p-3">
+        <div class="modal-header border-0">
+          <h5 class="modal-title fw-bold" id="suporteModalLabel">Esqueceu sua senha?</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body">
+          <p>
+            Para redefinir sua senha, entre em contato com o suporte técnico da Clínica Bem Estar.<br>
+            Abra um chamado enviando uma mensagem para o e-mail ou número abaixo, informando seu nome completo e,
+            se possível, o e-mail cadastrado no sistema.<br><br>
+            <strong>E-mail:</strong> suportehipotetico@gmail.com<br>
+            <strong>Telefone/WhatsApp:</strong> (XX) XXXX-XXXX<br><br>
+            Nossa equipe retornará o contato o mais breve possível para auxiliá-lo no processo de recuperação de acesso.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="{{ url_for('static', filename='js/typeuser.js') }}"></script>
+</body>
+</html>

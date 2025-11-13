@@ -1,0 +1,49 @@
+{
+  "medicos": [
+    {
+      "id": 1,
+      "nome": "Dr. João Silva",
+      "email": "medico@email",
+      "senha": "123"
+    },
+    {
+      "id": 2,
+      "nome": "Dra. Maria Oliveira",
+      "email": "maria@med.com",
+      "senha": "123"
+    },
+    {
+      "id": 3,
+      "nome": "Dr. Carlos Pereira",
+      "email": "carlos@med.com",
+      "senha": "123"
+    }
+  ],
+  "pacientes": [
+    {
+      "id": 1,
+      "nome": "Ant Gabriel Amaro De Assis",
+      "cpf": "11111111111111",
+      "nascimento": "2025-11-10",
+      "telefone": "88996329560",
+      "endereco": "Rua Fiscal Chico Lucas, 04",
+      "peso": "12",
+      "altura": "12"
+    },
+    {
+      "id": 2,
+      "nome": "hugo guimaraes da silva linhars",
+      "cpf": "cpf do best",
+      "nascimento": "1908-01-25",
+      "telefone": "2",
+      "endereco": "é acula",
+      "peso": "18",
+      "altura": "1.32"
+    }
+  ],
+  "consultas": [],
+  "next_ids": {
+    "paciente": 6,
+    "consulta": 8
+  }
+}
