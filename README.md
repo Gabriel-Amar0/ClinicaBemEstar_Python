@@ -1,6 +1,8 @@
----
+
 
 # Clínica Bem Estar 
+
+
 
 ## Descrição do Projeto
 
@@ -28,6 +30,8 @@ O sistema inclui:
 
 | Nome                           |
 | ------------------------------ |
+| Jose Carlos Pereira Dantas |
+| David Alves Do Nascimento |
 | Antonio Gabriel Amaro De Assis |
 
 ---
