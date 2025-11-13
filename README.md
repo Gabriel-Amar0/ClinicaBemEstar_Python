@@ -28,7 +28,7 @@ O sistema inclui:
 ## Equipe de Desenvolvimento
 
 | Nome                           | User |
-| ------------------------------ | --- |
+| ------------------------------ | ---- |
 | Jose Carlos Pereira Dantas | EsojSolrack |
 | David Alves Do Nascimento | Dzave |
 | Antonio Gabriel Amaro De Assis | Gabriel-Amar0 |
