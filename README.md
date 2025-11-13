@@ -28,11 +28,11 @@ O sistema inclui:
 
 ## Equipe de Desenvolvimento
 
-| Nome                           |
-| ------------------------------ |
-| Jose Carlos Pereira Dantas |
-| David Alves Do Nascimento |
-| Antonio Gabriel Amaro De Assis |
+| Nome                           | User |
+| ------------------------------ | - |
+| Jose Carlos Pereira Dantas | EsojSolrack |
+| David Alves Do Nascimento | Dzave |
+| Antonio Gabriel Amaro De Assis | Gabriel-Amar0 |
 
 ---
 
