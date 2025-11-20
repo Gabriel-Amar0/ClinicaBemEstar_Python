@@ -20,11 +20,13 @@
       </div>
     </div>
     <nav class="d-flex align-items-center gap-3">
-      <a href="#" class="nav-link active">Agendar Consulta</a>
-      <a href="#" class="nav-link">Cadastrar Paciente</a>
-      <a href="#" class="nav-link">Listar Consultas</a>
-      <a href="{{ url_for('logout') }}" class="btn btn-danger btn-sm">Sair</a>
-    </nav>
+  <a href="#" class="nav-link active">Agendar Consulta</a>
+  <a href="#" class="nav-link">Cadastrar Paciente</a>
+  <a href="#" class="nav-link">Listar Consultas</a>
+  <a href="#" class="nav-link">Listar Pacientes</a> 
+  
+  <a href="{{ url_for('logout') }}" class="btn btn-danger btn-sm">Sair</a>
+</nav>
   </header>
 
   <!-- CONTAINER PRINCIPAL -->
@@ -138,6 +140,30 @@
         </div>
       </div>
     </div>
+
+        <!-- Listar Paciente -->
+
+
+    <section id="listar-pacientes" class="conteudo-secao escondido">
+  <h4 class="fw-bold text-primary">Lista de Pacientes</h4>
+  <div class="table-responsive">
+    <table class="table table-striped mt-3 align-middle" id="tabelaPacientesMain">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Nome</th>
+          <th>CPF</th>
+          <th>Data Nasc.</th>
+          <th>Peso (kg)</th>
+          <th>Altura (m)</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        </tbody>
+    </table>
+  </div>
+</section>
 
     <!-- AGENDAR CONSULTA -->
     <section id="agendar" class="conteudo-secao">

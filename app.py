@@ -149,21 +149,36 @@ def api_pacientes():
     return jsonify(paciente), 201
 
 
-@app.route('/api/pacientes/<int:pid>', methods=['PUT', 'DELETE'])
-def api_paciente_update(pid):
+@app.route('/api/pacientes/<cpf>', methods=['PUT', 'DELETE'])
+def api_paciente_update(cpf):
     db = read_db()
-    paciente = next((p for p in db['pacientes'] if p['id'] == pid), None)
+    # Agora buscamos pelo CPF (convertido para string para garantir)
+    # A URL envia o CPF, então procuramos p['cpf'] == cpf
+    paciente = next((p for p in db['pacientes'] if str(p['cpf']) == str(cpf)), None)
 
     if not paciente:
         return jsonify({"message": "Paciente não encontrado"}), 404
 
     if request.method == 'DELETE':
-        db['pacientes'] = [p for p in db['pacientes'] if p['id'] != pid]
+        # Filtra a lista mantendo apenas quem tem CPF diferente do enviado
+        db['pacientes'] = [p for p in db['pacientes'] if str(p['cpf']) != str(cpf)]
+        
+        # Opcional: Se quiser apagar também as consultas desse paciente para não dar erro depois:
+        # db['consultas'] = [c for c in db['consultas'] if str(c['cpf']) != str(cpf)]
+        
         write_db(db)
         return jsonify({"ok": True})
 
     # Atualização (PUT)
     data = request.json
+    
+    # Se o usuário alterou o CPF na edição, verificamos se já não existe outro igual
+    novo_cpf = data.get('cpf')
+    if novo_cpf and novo_cpf != cpf:
+        existente = next((p for p in db['pacientes'] if p['cpf'] == novo_cpf), None)
+        if existente:
+             return jsonify({"message": "Novo CPF já existente no sistema"}), 400
+
     for campo in ['nome', 'cpf', 'nascimento', 'telefone', 'endereco', 'peso', 'altura']:
         if campo in data and data[campo] is not None:
             paciente[campo] = data[campo]
