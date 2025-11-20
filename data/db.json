@@ -21,38 +21,57 @@
   ],
   "pacientes": [
     {
-      "id": 8,
-      "nome": "Dave",
-      "cpf": "777",
-      "nascimento": "2025-01-20",
-      "telefone": "123456777",
-      "endereco": "acula, ou por ali",
-      "peso": "2",
-      "altura": "4"
+      "id": 11,
+      "nome": "Ant Gabriel Amaro De Assis",
+      "cpf": "12",
+      "nascimento": "2025-11-20",
+      "telefone": "88996329560",
+      "endereco": "Rua Fiscal Chico Lucas, 04",
+      "peso": "0.1",
+      "altura": "0.01"
     },
     {
-      "id": 9,
-      "nome": "Amaro",
-      "cpf": "12",
-      "nascimento": "2025-11-06",
-      "telefone": "889963295",
-      "endereco": "Rua Fiscal Chico Lucas4",
-      "peso": "0.1",
-      "altura": "7"
+      "id": 12,
+      "nome": "ABC da amazonia",
+      "cpf": "13",
+      "nascimento": "2025-11-20",
+      "telefone": "2",
+      "endereco": "acula, ou por ali",
+      "peso": "2",
+      "altura": "2"
     }
   ],
   "consultas": [
     {
-      "id": 16,
+      "id": 17,
       "medico_id": 1,
       "cpf": "12",
-      "datahora": "2025-11-20T12:45",
+      "datahora": "2025-11-20T19:56",
       "observacoes": "Vai fazer uns exame ai",
-      "status": "Agendado"
+      "status": "Concluído",
+      "pagamento": "Dinheiro"
+    },
+    {
+      "id": 18,
+      "medico_id": 2,
+      "cpf": "13",
+      "datahora": "2025-06-20T20:13",
+      "observacoes": "Limpeza estomacal",
+      "status": "Concluído",
+      "pagamento": "PIX"
+    },
+    {
+      "id": 19,
+      "medico_id": 3,
+      "cpf": "13",
+      "datahora": "2025-11-20T20:18",
+      "observacoes": "Vai fazer uns exame ai",
+      "status": "Agendado",
+      "pagamento": "Dinheiro"
     }
   ],
   "next_ids": {
-    "paciente": 10,
-    "consulta": 17
+    "paciente": 13,
+    "consulta": 20
   }
 }

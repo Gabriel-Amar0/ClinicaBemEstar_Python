@@ -226,6 +226,7 @@ def api_consultas():
         "cpf": data.get('cpf'),
         "datahora": data.get('datahora'),
         "observacoes": data.get('observacoes'),
+        "pagamento": data.get('pagamento'),
         "status": data.get('status', 'Agendado')
     }
     db['consultas'].append(consulta)
@@ -252,6 +253,7 @@ def api_consulta_update(cid):
     consulta['datahora'] = data.get('datahora', consulta['datahora'])
     consulta['observacoes'] = data.get('observacoes', consulta['observacoes'])
     consulta['status'] = data.get('status', consulta['status'])
+    consulta['pagamento'] = data.get('pagamento', consulta.get('pagamento'))
     write_db(db)
     return jsonify(consulta)
 
