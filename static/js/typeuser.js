@@ -107,6 +107,7 @@ navLinks.forEach(link => {
     let consultasCache = []; // cache local para checagens e paginação
     let consultasFiltradas = [];
     let pacientesCache = [];
+    let pacientesFiltrados = [];
     let consultasPage = 1;
 
     // criar modal de pacientes dinamicamente (para não alterar HTML)
@@ -148,69 +149,104 @@ navLinks.forEach(link => {
 
     // carrega pacientes do servidor e popula select e cache
     async function loadPacientes() {
-  try {
-    const res = await fetch('/api/pacientes');
-    const pacs = await res.json();
-    pacientesCache = pacs || [];
-    
-    // Atualiza o select do Agendamento
-    selectPaciente.innerHTML = '<option value="" selected disabled>Selecione</option>';
-    pacs.forEach(p => {
-      const opt = document.createElement('option');
-      opt.value = p.cpf;
-      opt.textContent = `${p.nome} (CPF: ${p.cpf})`;
-      selectPaciente.appendChild(opt);
-    });
+      try {
+        const res = await fetch('/api/pacientes');
+        const pacs = await res.json();
+        pacientesCache = pacs || [];
+        
+        // INICIALIZA A LISTA FILTRADA COM TUDO QUE VEIO DO BANCO
+        pacientesFiltrados = [...pacientesCache];
 
-    // NOVO: Atualiza a tabela principal de pacientes
-    renderizarTabelaPacientesMain();
-    
-    // Se o modal antigo estiver aberto, atualiza ele também (opcional)
-    montarTabelaPacientes(); 
+        // Atualiza o select do Agendamento
+        if (selectPaciente) {
+            selectPaciente.innerHTML = '<option value="" selected disabled>Selecione</option>';
+            pacs.forEach(p => {
+              const opt = document.createElement('option');
+              opt.value = p.cpf;
+              opt.textContent = `${p.nome} (CPF: ${p.cpf})`;
+              selectPaciente.appendChild(opt);
+            });
+        }
 
-  } catch (err) {
-    console.error('Erro ao carregar pacientes:', err);
-  }
-}
+        renderizarTabelaPacientesMain();
+        // Se o modal antigo estiver aberto, atualiza ele também
+        if (typeof montarTabelaPacientes === 'function') montarTabelaPacientes(); 
+
+      } catch (err) {
+        console.error('Erro ao carregar pacientes:', err);
+      }
+    }
 
     // Função para renderizar a tabela na seção principal
 function renderizarTabelaPacientesMain() {
-  
-  if (!tabelaPacientesBody) return;
-  tabelaPacientesBody.innerHTML = '';
+      if (!tabelaPacientesBody) return;
+      tabelaPacientesBody.innerHTML = '';
 
-  if (pacientesCache.length === 0) {
-    tabelaPacientesBody.innerHTML = '<tr><td colspan="7" class="text-center">Nenhum paciente cadastrado.</td></tr>';
-    return;
-  }
+      // AGORA USA A LISTA FILTRADA
+      if (pacientesFiltrados.length === 0) {
+        tabelaPacientesBody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Nenhum paciente encontrado na busca.</td></tr>';
+        return;
+      }
 
-  pacientesCache.forEach(p => {
-    const tr = document.createElement('tr');
-    
-    // Formatar data se necessário (ex: 2025-11-10 -> 10/11/2025)
-    let nascFormatado = p.nascimento;
-    try {
-       if(p.nascimento) {
-         const [ano, mes, dia] = p.nascimento.split('-');
-         nascFormatado = `${dia}/${mes}/${ano}`;
-       }
-    } catch(e){}
+      pacientesFiltrados.forEach(p => {
+        const tr = document.createElement('tr');
+        
+        // Formatação da data para exibição (para ficar bonito na tabela)
+        let nascFormatado = p.nascimento;
+        try {
+           if(p.nascimento && p.nascimento.includes('-')) {
+             const [ano, mes, dia] = p.nascimento.split('-');
+             nascFormatado = `${dia}/${mes}/${ano}`;
+           }
+        } catch(e){}
 
-    tr.innerHTML = `
-      <td>${p.id || '-'}</td>
-      <td>${p.nome}</td>
-      <td>${p.cpf}</td>
-      <td>${nascFormatado}</td>
-      <td>${p.peso}</td>
-      <td>${p.altura}</td>
-      <td>
-        <button class="btn btn-sm btn-primary btn-edit-paciente-main" data-cpf="${p.cpf}">Editar</button>
-        <button class="btn btn-sm btn-danger btn-delete-paciente-main" data-cpf="${p.cpf}">Excluir</button>
-      </td>
-    `;
-    tabelaPacientesBody.appendChild(tr);
-  });
-}
+        tr.innerHTML = `
+          <td>${p.id || '-'}</td>
+          <td>${p.nome}</td>
+          <td>${p.cpf}</td>
+          <td>${nascFormatado}</td>
+          <td>${p.peso}</td>
+          <td>${p.altura}</td>
+          <td>
+            <button class="btn btn-sm btn-primary btn-edit-paciente-main" data-cpf="${p.cpf}">Editar</button>
+            <button class="btn btn-sm btn-danger btn-delete-paciente-main" data-cpf="${p.cpf}">Excluir</button>
+          </td>
+        `;
+        tabelaPacientesBody.appendChild(tr);
+      });
+    }
+
+    // LÓGICA DE BUSCA DE PACIENTES
+    const formBuscaPac = document.getElementById('formBuscaPaciente');
+    if (formBuscaPac) {
+      formBuscaPac.addEventListener('submit', (e) => {
+        e.preventDefault();
+        
+        const campo = document.getElementById('busca-paciente-campo').value;
+        const termo = document.getElementById('busca-paciente-valor').value.trim().toLowerCase();
+
+        if (termo === '') {
+          pacientesFiltrados = [...pacientesCache];
+        } else {
+          pacientesFiltrados = pacientesCache.filter(p => {
+            let valorOriginal = p[campo];
+
+            // TRUQUE DA DATA:
+            // O banco guarda "2000-01-25", mas o usuário busca por "25/01/2000"
+            // Convertemos para o formato brasileiro antes de comparar
+            if (campo === 'nascimento' && valorOriginal && valorOriginal.includes('-')) {
+                 const [ano, mes, dia] = valorOriginal.split('-');
+                 valorOriginal = `${dia}/${mes}/${ano}`;
+            }
+
+            const valorString = String(valorOriginal || '').toLowerCase();
+            return valorString.includes(termo);
+          });
+        }
+
+        renderizarTabelaPacientesMain();
+      });
+    }
 
 if (tabelaPacientesBody) {
     tabelaPacientesBody.addEventListener('click', async (e) => {
@@ -416,7 +452,7 @@ if (tabelaPacientesBody) {
       const pageItems = consultasFiltradas.slice(start, start + ITEMS_PER_PAGE);
 
       if (pageItems.length === 0) {
-        tabelaConsultasBody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">Nenhuma consulta encontrada.</td></tr>';
+        tabelaConsultasBody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">Nenhuma consulta encontrada na busca.</td></tr>';
       } else {
         pageItems.forEach(c => {
           const tr = document.createElement('tr');
