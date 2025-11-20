@@ -152,33 +152,46 @@ def api_pacientes():
 @app.route('/api/pacientes/<cpf>', methods=['PUT', 'DELETE'])
 def api_paciente_update(cpf):
     db = read_db()
-    # Agora buscamos pelo CPF (convertido para string para garantir)
-    # A URL envia o CPF, então procuramos p['cpf'] == cpf
-    paciente = next((p for p in db['pacientes'] if str(p['cpf']) == str(cpf)), None)
+    # Converte para string para garantir a comparação correta
+    cpf_str = str(cpf)
+    
+    paciente = next((p for p in db['pacientes'] if str(p['cpf']) == cpf_str), None)
 
     if not paciente:
         return jsonify({"message": "Paciente não encontrado"}), 404
 
     if request.method == 'DELETE':
-        # Filtra a lista mantendo apenas quem tem CPF diferente do enviado
-        db['pacientes'] = [p for p in db['pacientes'] if str(p['cpf']) != str(cpf)]
+        # Remove o paciente
+        db['pacientes'] = [p for p in db['pacientes'] if str(p['cpf']) != cpf_str]
         
-        # Opcional: Se quiser apagar também as consultas desse paciente para não dar erro depois:
-        # db['consultas'] = [c for c in db['consultas'] if str(c['cpf']) != str(cpf)]
+        # OPCIONAL: Se quiser apagar também as consultas desse paciente ao excluir:
+        # db['consultas'] = [c for c in db['consultas'] if str(c['cpf']) != cpf_str]
         
         write_db(db)
         return jsonify({"ok": True})
 
-    # Atualização (PUT)
+    # Lógica de ATUALIZAÇÃO (PUT)
     data = request.json
     
-    # Se o usuário alterou o CPF na edição, verificamos se já não existe outro igual
+    # Verifica se o CPF está sendo alterado
     novo_cpf = data.get('cpf')
-    if novo_cpf and novo_cpf != cpf:
-        existente = next((p for p in db['pacientes'] if p['cpf'] == novo_cpf), None)
+    
+    if novo_cpf and str(novo_cpf) != cpf_str:
+        # 1. Verifica se o novo CPF já existe em OUTRO paciente (evitar duplicidade)
+        existente = next((p for p in db['pacientes'] if str(p['cpf']) == str(novo_cpf)), None)
         if existente:
              return jsonify({"message": "Novo CPF já existente no sistema"}), 400
+        
+        # 2. ATUALIZAÇÃO EM CASCATA: Atualiza o CPF em todas as consultas desse paciente
+        # Isso é o que corrige o seu bug!
+        count_updates = 0
+        for consulta in db['consultas']:
+            if str(consulta.get('cpf')) == cpf_str:
+                consulta['cpf'] = str(novo_cpf)
+                count_updates += 1
+        print(f"CPF atualizado em {count_updates} consultas.")
 
+    # Atualiza os dados do paciente
     for campo in ['nome', 'cpf', 'nascimento', 'telefone', 'endereco', 'peso', 'altura']:
         if campo in data and data[campo] is not None:
             paciente[campo] = data[campo]
