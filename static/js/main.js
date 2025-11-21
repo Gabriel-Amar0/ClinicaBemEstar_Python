@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', function () {
       } else if (this.textContent.includes('Cadastrar')) {
         document.getElementById('cadastro').classList.remove('escondido');
       } else if (this.textContent.includes('Listar')) {
-        document.getElementById('consultas').classList.remove('escondido');
+        document.getElementById('consultas').classList.remove('escondido'); 
       }
     });
   });

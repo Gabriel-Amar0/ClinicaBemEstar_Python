@@ -63,27 +63,31 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   // ============================
-  // NAVEGAÇÃO ENTRE SEÇÕES
-  // ============================
-  const navLinks = document.querySelectorAll('nav .nav-link');
-  const sections = document.querySelectorAll('.conteudo-secao');
+// NAVEGAÇÃO ENTRE SEÇÕES (Atualizado)
+// ============================
+const navLinks = document.querySelectorAll('nav .nav-link');
+const sections = document.querySelectorAll('.conteudo-secao');
 
-  navLinks.forEach(link => {
-    link.addEventListener('click', function(e) {
-      e.preventDefault();
-      navLinks.forEach(l => l.classList.remove('active'));
-      this.classList.add('active');
-      sections.forEach(sec => sec.classList.add('escondido'));
+navLinks.forEach(link => {
+  link.addEventListener('click', function(e) {
+    e.preventDefault();
+    navLinks.forEach(l => l.classList.remove('active'));
+    this.classList.add('active');
+    sections.forEach(sec => sec.classList.add('escondido'));
 
-      if (this.textContent.includes('Agendar')) {
-        document.getElementById('agendar').classList.remove('escondido');
-      } else if (this.textContent.includes('Cadastrar')) {
-        document.getElementById('cadastro').classList.remove('escondido');
-      } else if (this.textContent.includes('Listar')) {
-        document.getElementById('consultas').classList.remove('escondido');
-      }
-    });
+    const texto = this.textContent;
+
+    if (texto.includes('Agendar')) {
+      document.getElementById('agendar').classList.remove('escondido');
+    } else if (texto.includes('Cadastrar')) {
+      document.getElementById('cadastro').classList.remove('escondido');
+    } else if (texto.includes('Listar Consultas')) { // Ajustado para ser específico
+      document.getElementById('consultas').classList.remove('escondido');
+    } else if (texto.includes('Listar Pacientes')) { // NOVA LÓGICA
+      document.getElementById('listar-pacientes').classList.remove('escondido');
+    }
   });
+});
 
   // ============================
   // ATENDENTE: PACIENTES & CONSULTAS
@@ -92,15 +96,20 @@ document.addEventListener('DOMContentLoaded', function() {
     const formCadastro = document.getElementById('formCadastro');
     const formAgendar = document.getElementById('formAgendar');
     const selectPaciente = document.getElementById('form-paciente');
+    const tabelaPacientesBody = document.querySelector('#tabelaPacientesMain tbody');
     const tabelaConsultasBody = document.querySelector('#tabelaConsultas tbody');
     const formEditar = document.getElementById('formEditar');
     let consultaEditando = null;
+    let pacienteEditandoCPF = null;
 
     // ====== Config paginação ======
     const ITEMS_PER_PAGE = 5;
     let consultasCache = []; // cache local para checagens e paginação
+    let consultasFiltradas = [];
     let pacientesCache = [];
+    let pacientesFiltrados = [];
     let consultasPage = 1;
+    let pacientesPage = 1;
 
     // criar modal de pacientes dinamicamente (para não alterar HTML)
     function criarModalPacientes() {
@@ -136,17 +145,7 @@ document.addEventListener('DOMContentLoaded', function() {
       btn.id = 'btnVerPacientes';
       btn.className = 'btn btn-outline-primary mt-3';
       btn.textContent = 'Ver Pacientes';
-      // adiciona logo abaixo do formulário (antes do close container)
-      formCadastro.appendChild(btn);
-      btn.addEventListener('click', () => {
-        criarModalPacientes();
-        montarTabelaPacientes();
-        const modal = new bootstrap.Modal(document.getElementById('modalPacientes'), {
-          backdrop: 'static',
-          keyboard: false
-        });
-        modal.show();
-      });
+     
     }
 
     // carrega pacientes do servidor e popula select e cache
@@ -155,17 +154,189 @@ document.addEventListener('DOMContentLoaded', function() {
         const res = await fetch('/api/pacientes');
         const pacs = await res.json();
         pacientesCache = pacs || [];
-        selectPaciente.innerHTML = '<option value="" selected disabled>Selecione</option>';
-        pacs.forEach(p => {
-          const opt = document.createElement('option');
-          opt.value = p.cpf;
-          opt.textContent = `${p.nome} (CPF: ${p.cpf})`;
-          selectPaciente.appendChild(opt);
-        });
+        
+        // INICIALIZA A LISTA FILTRADA COM TUDO QUE VEIO DO BANCO
+        pacientesFiltrados = [...pacientesCache];
+
+        // Atualiza o select do Agendamento
+        if (selectPaciente) {
+            selectPaciente.innerHTML = '<option value="" selected disabled>Selecione</option>';
+            pacs.forEach(p => {
+              const opt = document.createElement('option');
+              opt.value = p.cpf;
+              opt.textContent = `${p.nome} (CPF: ${p.cpf})`;
+              selectPaciente.appendChild(opt);
+            });
+        }
+
+        renderizarTabelaPacientesMain();
+        // Se o modal antigo estiver aberto, atualiza ele também
+        if (typeof montarTabelaPacientes === 'function') montarTabelaPacientes(); 
+
       } catch (err) {
         console.error('Erro ao carregar pacientes:', err);
       }
     }
+
+    // Função para renderizar a tabela na seção principal
+function renderizarTabelaPacientesMain() {
+      if (!tabelaPacientesBody) return;
+      tabelaPacientesBody.innerHTML = '';
+
+      // 1. CALCULAR PAGINAÇÃO
+      const totalItems = pacientesFiltrados.length;
+      const totalPages = Math.max(1, Math.ceil(totalItems / ITEMS_PER_PAGE));
+
+      // Segurança: se estamos na pág 2 e filtramos algo que só tem 1 pág, volta pra 1
+      if (pacientesPage > totalPages) pacientesPage = 1;
+
+      const start = (pacientesPage - 1) * ITEMS_PER_PAGE;
+      const pageItems = pacientesFiltrados.slice(start, start + ITEMS_PER_PAGE);
+
+      // 2. DESENHAR AS LINHAS (Igual antes, mas usando pageItems)
+      if (pageItems.length === 0) {
+        tabelaPacientesBody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Nenhum paciente encontrado.</td></tr>';
+      } else {
+        pageItems.forEach(p => {
+          const tr = document.createElement('tr');
+          
+          let nascFormatado = p.nascimento;
+          try {
+             if(p.nascimento && p.nascimento.includes('-')) {
+               const [ano, mes, dia] = p.nascimento.split('-');
+               nascFormatado = `${dia}/${mes}/${ano}`;
+             }
+          } catch(e){}
+
+          tr.innerHTML = `
+            <td>${p.id || '-'}</td>
+            <td>${p.nome}</td>
+            <td>${p.cpf}</td>
+            <td>${nascFormatado}</td>
+            <td>${p.peso}</td>
+            <td>${p.altura}</td>
+            <td>
+              <button class="btn btn-sm btn-primary btn-edit-paciente-main" data-cpf="${p.cpf}">Editar</button>
+              <button class="btn btn-sm btn-danger btn-delete-paciente-main" data-cpf="${p.cpf}">Excluir</button>
+            </td>
+          `;
+          tabelaPacientesBody.appendChild(tr);
+        });
+      }
+
+      // 3. CRIAR BARRA DE PAGINAÇÃO (PAGER)
+      // Remove o pager antigo se existir para não duplicar
+      let pager = document.getElementById('pacientesPager');
+      if (pager) pager.remove();
+
+      // Onde vamos inserir o pager? Logo após a div .table-responsive
+      const tableResponsiveDiv = document.getElementById('tabelaPacientesMain').parentElement;
+      
+      pager = document.createElement('div');
+      pager.id = 'pacientesPager';
+      pager.className = 'd-flex justify-content-between align-items-center mt-2'; // Estilo Bootstrap
+      
+      const endItem = Math.min(totalItems, start + pageItems.length);
+      const startItem = totalItems === 0 ? 0 : start + 1;
+
+      pager.innerHTML = `
+        <div class="text-muted">Mostrando ${startItem} - ${endItem} de ${totalItems}</div>
+        <div>
+          <button class="btn btn-sm btn-outline-secondary me-1" id="prevPagePac" ${pacientesPage <= 1 ? 'disabled' : ''}>Anterior</button>
+          <span class="mx-2">Página ${pacientesPage} / ${totalPages}</span>
+          <button class="btn btn-sm btn-outline-secondary ms-1" id="nextPagePac" ${pacientesPage >= totalPages ? 'disabled' : ''}>Próxima</button>
+        </div>
+      `;
+
+      // Insere o pager na tela
+      tableResponsiveDiv.parentElement.appendChild(pager);
+
+      // 4. EVENTOS DOS BOTÕES (Anterior / Próxima)
+      document.getElementById('prevPagePac').addEventListener('click', () => {
+        if (pacientesPage > 1) {
+          pacientesPage--;
+          renderizarTabelaPacientesMain();
+        }
+      });
+      
+      document.getElementById('nextPagePac').addEventListener('click', () => {
+        if (pacientesPage < totalPages) {
+          pacientesPage++;
+          renderizarTabelaPacientesMain();
+        }
+      });
+    }
+
+    // LÓGICA DE BUSCA DE PACIENTES
+    const formBuscaPac = document.getElementById('formBuscaPaciente');
+    if (formBuscaPac) {
+      formBuscaPac.addEventListener('submit', (e) => {
+        e.preventDefault();
+        
+        const campo = document.getElementById('busca-paciente-campo').value;
+        const termo = document.getElementById('busca-paciente-valor').value.trim().toLowerCase();
+
+        if (termo === '') {
+          pacientesFiltrados = [...pacientesCache];
+        } else {
+          pacientesFiltrados = pacientesCache.filter(p => {
+            let valorOriginal = p[campo];
+
+            // TRUQUE DA DATA:
+            // O banco guarda "2000-01-25", mas o usuário busca por "25/01/2000"
+            // Convertemos para o formato brasileiro antes de comparar
+            if (campo === 'nascimento' && valorOriginal && valorOriginal.includes('-')) {
+                 const [ano, mes, dia] = valorOriginal.split('-');
+                 valorOriginal = `${dia}/${mes}/${ano}`;
+            }
+
+            const valorString = String(valorOriginal || '').toLowerCase();
+            return valorString.includes(termo); 
+          });
+        }
+
+        // === AQUI ESTÁ A MUDANÇA ===
+        pacientesPage = 1; // Reseta para a primeira página sempre que buscar
+        renderizarTabelaPacientesMain();
+      });
+    }
+
+if (tabelaPacientesBody) {
+    tabelaPacientesBody.addEventListener('click', async (e) => {
+      
+      // 1. Lógica do botão EXCLUIR
+      if (e.target.classList.contains('btn-delete-paciente-main')) {
+        const cpf = e.target.dataset.cpf;
+        if (!confirm('Confirma exclusão do paciente?')) return;
+        
+        try {
+          const res = await fetch(`/api/pacientes/${encodeURIComponent(cpf)}`, { method: 'DELETE' });
+          if (res.ok) {
+            mostrarToast('Paciente excluído com sucesso!', 'success');
+            await atualizarTudoImediato(); // Recarrega a lista
+          } else {
+            mostrarToast('Erro ao excluir paciente', 'danger');
+          }
+        } catch (err) {
+          console.error(err);
+          mostrarToast('Erro de conexão', 'danger');
+        }
+      }
+
+      // 2. Lógica do botão EDITAR
+      if (e.target.classList.contains('btn-edit-paciente-main')) {
+        const cpf = e.target.dataset.cpf;
+        // Busca os dados completos do paciente no cache
+        const paciente = pacientesCache.find(p => p.cpf === cpf);
+        
+        if (paciente) {
+          // Reutiliza a função que já existe para abrir o modal!
+          abrirModalEditarPaciente(paciente); 
+        }
+      }
+    });
+  }
+
 
     // montar tabela de pacientes dentro do modal
     function montarTabelaPacientes() {
@@ -228,44 +399,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // cria modal de edição de paciente (reutilizável)
     function abrirModalEditarPaciente(paciente) {
-      // se já existe, apenas preencher e mostrar
-      if (!document.getElementById('modalEditarPaciente')) {
-        
+      const form = document.getElementById('formEditarPaciente');
+      if (!form) return;
 
-        // adicionar submit handler
-        document.getElementById('formEditarPaciente').addEventListener('submit', async (ev) => {
-          ev.preventDefault();
-          const cpf = document.getElementById('edit-paciente-cpf').value;
-          const payload = {
-            nome: document.getElementById('edit-paciente-nome').value,
-            nascimento: document.getElementById('edit-paciente-nasc').value,
-            telefone: document.getElementById('edit-paciente-telefone').value,
-            endereco: document.getElementById('edit-paciente-endereco').value,
-            peso: document.getElementById('edit-paciente-peso').value,
-            altura: document.getElementById('edit-paciente-altura').value
-          };
-          try {
-            const res = await fetch(`/api/pacientes/${encodeURIComponent(cpf)}`, {
-              method: 'PUT',
-              headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify(payload)
-            });
-            if (res.ok) {
-              mostrarToast('Paciente atualizado!', 'success');
-              const modalInst = bootstrap.Modal.getInstance(document.getElementById('modalEditarPaciente'));
-              modalInst.hide();
-              await atualizarTudoImediato();
-            } else {
-              mostrarToast('Erro ao atualizar paciente', 'danger');
-            }
-          } catch (err) {
-            console.error(err);
-            mostrarToast('Erro ao atualizar paciente', 'danger');
-          }
-        });
-      }
+      // Guarda o CPF original para usar na URL depois
+      pacienteEditandoCPF = paciente.cpf;
 
-      // preencher campos e abrir modal
+      // Preencher campos
       document.getElementById('edit-paciente-nome').value = paciente.nome || '';
       document.getElementById('edit-paciente-cpf').value = paciente.cpf || '';
       document.getElementById('edit-paciente-nasc').value = paciente.nascimento || '';
@@ -281,14 +421,64 @@ document.addEventListener('DOMContentLoaded', function() {
       modal.show();
     }
 
+    const formEditarPaciente = document.getElementById('formEditarPaciente');
+    if (formEditarPaciente) {
+      formEditarPaciente.addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        
+        if (!pacienteEditandoCPF) return; 
+
+        const payload = {
+          nome: document.getElementById('edit-paciente-nome').value,
+          cpf: document.getElementById('edit-paciente-cpf').value, 
+          nascimento: document.getElementById('edit-paciente-nasc').value,
+          telefone: document.getElementById('edit-paciente-telefone').value,
+          endereco: document.getElementById('edit-paciente-endereco').value,
+          peso: document.getElementById('edit-paciente-peso').value,
+          altura: document.getElementById('edit-paciente-altura').value
+        };
+
+        try {
+          // Usa o CPF antigo na URL para achar o registro correto
+          const res = await fetch(`/api/pacientes/${encodeURIComponent(pacienteEditandoCPF)}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+          });
+
+          if (res.ok) {
+            mostrarToast('Paciente atualizado com sucesso!', 'success');
+            
+            // Fechar modal e limpar variável
+            const modalEl = document.getElementById('modalEditarPaciente');
+            const modalInst = bootstrap.Modal.getInstance(modalEl);
+            if (modalInst) modalInst.hide();
+            
+            pacienteEditandoCPF = null; // Boa prática: limpar após uso
+            await atualizarTudoImediato(); 
+          } else {
+            const err = await res.json();
+            mostrarToast(err.message || 'Erro ao atualizar paciente', 'danger');
+          }
+        } catch (err) {
+          console.error(err);
+          mostrarToast('Erro de conexão', 'danger');
+        }
+      });
+    }
+
     // carregar consultas do servidor e popular tabela com paginação
     async function loadConsultas(page = 1) {
       try {
         const res = await fetch('/api/consultas');
         const consultas = await res.json();
         consultasCache = consultas || [];
+        
+        // Se não houver busca ativa, a lista filtrada é igual à original
+        consultasFiltradas = [...consultasCache]; 
+        
         consultasPage = page;
-        renderConsultasPage();
+        renderConsultasPage(); // Agora chama o render usando a lista filtrada
       } catch (err) {
         console.error('Erro ao carregar consultas:', err);
       }
@@ -296,38 +486,62 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function renderConsultasPage() {
       tabelaConsultasBody.innerHTML = '';
+      
+      // Usamos consultasFiltradas para saber o total
+      const totalItems = consultasFiltradas.length;
+      const totalPages = Math.max(1, Math.ceil(totalItems / ITEMS_PER_PAGE));
+
+      if (consultasCache.length === 0) {
+        tabelaConsultasBody.innerHTML = '<tr><td colspan="11" class="text-center">Nenhuma consulta cadastrada.</td></tr>';
+        return;
+      }
+
+      // Ajuste de segurança se a busca reduzir as páginas e estivermos numa página alta
+      if (consultasPage > totalPages) consultasPage = 1;
+
       const start = (consultasPage - 1) * ITEMS_PER_PAGE;
-      const pageItems = consultasCache.slice(start, start + ITEMS_PER_PAGE);
+      
+      // O "slice" agora é feito na lista FILTRADA
+      const pageItems = consultasFiltradas.slice(start, start + ITEMS_PER_PAGE);
 
-      pageItems.forEach(c => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${c.id}</td>
-          <td>${c.medico_id}</td>
-          <td>${c.paciente_nome || ''}</td>
-          <td>${c.paciente_contato || ''}</td>
-          <td>${c.cpf}</td>
-          <td>${formataDataHoraParaExibir(c.datahora)}</td>
-          <td>${c.observacoes}</td>
-          <td>${c.status}</td>
-          <td>
-            <button class="btn btn-sm btn-primary btn-edit" data-id="${c.id}">Editar</button>
-            <button class="btn btn-sm btn-danger btn-delete" data-id="${c.id}">Excluir</button>
-          </td>
-        `;
-        tabelaConsultasBody.appendChild(tr);
-      });
+      if (pageItems.length === 0) {
+        tabelaConsultasBody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">Nenhuma consulta encontrada.</td></tr>';
+      } else {
+        pageItems.forEach(c => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${c.id}</td>
+            <td>${c.medico_id}</td>
+            <td>${c.paciente_nome || ''}</td>
+            <td>${c.paciente_contato || ''}</td>
+            <td>${c.cpf}</td>
+            <td>${formataDataHoraParaExibir(c.datahora)}</td>
+            <td>${c.observacoes}</td>
+            <td>${c.status}</td>
+            <td>
+              <button class="btn btn-sm btn-primary btn-edit" data-id="${c.id}">Editar</button>
+              <button class="btn btn-sm btn-danger btn-delete" data-id="${c.id}">Excluir</button>
+            </td>
+          `;
+          tabelaConsultasBody.appendChild(tr);
+        });
+      }
 
-      // pager (simples)
+      // Pager (Atualizado para usar consultasFiltradas)
       const tableWrapper = document.getElementById('tabelaConsultas').parentElement;
       let pager = document.getElementById('consultasPager');
       if (pager) pager.remove();
+      
       pager = document.createElement('div');
       pager.id = 'consultasPager';
       pager.className = 'd-flex justify-content-between align-items-center mt-2';
-      const totalPages = Math.max(1, Math.ceil(consultasCache.length / ITEMS_PER_PAGE));
+      
+      // Texto de exibição corrigido
+      const endItem = Math.min(totalItems, start + pageItems.length);
+      const startItem = totalItems === 0 ? 0 : start + 1;
+
       pager.innerHTML = `
-        <div>Mostrando ${Math.min(consultasCache.length, start + 1)} - ${Math.min(consultasCache.length, start + pageItems.length)} de ${consultasCache.length}</div>
+        <div>Mostrando ${startItem} - ${endItem} de ${totalItems}</div>
         <div>
           <button class="btn btn-sm btn-outline-secondary me-1" id="prevPage" ${consultasPage <= 1 ? 'disabled' : ''}>Anterior</button>
           <span class="mx-2">Página ${consultasPage} / ${totalPages}</span>
@@ -347,6 +561,41 @@ document.addEventListener('DOMContentLoaded', function() {
           consultasPage++;
           renderConsultasPage();
         }
+      });
+    }
+
+    // LOGICA DE BUSCA DE CONSULTAS
+    const formBusca = document.getElementById('formBuscaConsulta');
+    if (formBusca) {
+      formBusca.addEventListener('submit', (e) => {
+        e.preventDefault();
+        
+        const campo = document.getElementById('busca-campo').value; // ex: paciente_nome
+        const termo = document.getElementById('busca-valor').value.trim().toLowerCase();
+
+        // Se o campo estiver vazio, restaura a lista completa
+        if (termo === '') {
+          consultasFiltradas = [...consultasCache];
+        } else {
+          // Filtra o consultasCache
+          consultasFiltradas = consultasCache.filter(c => {
+            // Pega o valor do objeto (ex: c.paciente_nome)
+            let valorOriginal = c[campo];
+            
+            // Tratamento especial para data (se o usuário digitar parte da data)
+            if (campo === 'datahora') {
+               valorOriginal = formataDataHoraParaExibir(c.datahora);
+            }
+
+            // Converte para string e minúsculo para comparar
+            const valorString = String(valorOriginal || '').toLowerCase();
+            return valorString.includes(termo);
+          });
+        }
+
+        // Volta para a página 1 e renderiza
+        consultasPage = 1;
+        renderConsultasPage();
       });
     }
 
@@ -411,7 +660,8 @@ document.addEventListener('DOMContentLoaded', function() {
         cpf: document.getElementById('form-paciente').value,
         datahora: document.getElementById('form-datahora').value,
         observacoes: document.getElementById('form-obs').value,
-        medico_id: document.getElementById('form-medico').value
+        medico_id: document.getElementById('form-medico').value,
+        pagamento: document.getElementById('form-pagamento').value
       };
 
       // validação básica
@@ -520,6 +770,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         document.getElementById('edit-obs').value = c.observacoes;
         document.getElementById('edit-status').value = c.status;
+        document.getElementById('edit-pagamento').value = c.pagamento || 'Dinheiro';
 
         const modal = new bootstrap.Modal(document.getElementById('modalEditar'), {
           backdrop: 'static',
@@ -534,12 +785,13 @@ document.addEventListener('DOMContentLoaded', function() {
       e.preventDefault();
       if (!consultaEditando) return;
       const dados = {
-     nome: document.getElementById('edit-nome').value,
-    cpf: document.getElementById('edit-cpf').value,
-    paciente_contato: document.getElementById('edit-contato').value,
-    datahora: document.getElementById('edit-datahora').value,
-    observacoes: document.getElementById('edit-obs').value,
-    status: document.getElementById('edit-status').value
+      nome: document.getElementById('edit-nome').value,
+      cpf: document.getElementById('edit-cpf').value,
+      paciente_contato: document.getElementById('edit-contato').value,
+      datahora: document.getElementById('edit-datahora').value,
+      observacoes: document.getElementById('edit-obs').value,
+      status: document.getElementById('edit-status').value,
+      pagamento: document.getElementById('edit-pagamento').value
       };
 
       // verificar conflito: se novo horário coincide com outro agendamento do mesmo médico (exceto a própria consulta)

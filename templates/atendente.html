@@ -20,11 +20,13 @@
       </div>
     </div>
     <nav class="d-flex align-items-center gap-3">
-      <a href="#" class="nav-link active">Agendar Consulta</a>
-      <a href="#" class="nav-link">Cadastrar Paciente</a>
-      <a href="#" class="nav-link">Listar Consultas</a>
-      <a href="{{ url_for('logout') }}" class="btn btn-danger btn-sm">Sair</a>
-    </nav>
+  <a href="#" class="nav-link active">Agendar Consulta</a>
+  <a href="#" class="nav-link">Cadastrar Paciente</a>
+  <a href="#" class="nav-link">Listar Consultas</a> 
+  <a href="#" class="nav-link">Listar Pacientes</a> 
+  
+  <a href="{{ url_for('logout') }}" class="btn btn-danger btn-sm">Sair</a>
+</nav>
   </header>
 
   <!-- CONTAINER PRINCIPAL -->
@@ -139,6 +141,58 @@
       </div>
     </div>
 
+        <!-- Listar Paciente -->
+
+
+    <section id="listar-pacientes" class="conteudo-secao escondido">
+  <h4 class="fw-bold text-primary">Lista de Pacientes</h4>
+
+      <div class="card bg-light mb-3 border-0">
+  <div class="card-body p-2">
+    <form id="formBuscaPaciente" class="row g-2 align-items-center">
+      <div class="col-md-3">
+        <select id="busca-paciente-campo" class="form-select form-select-sm">
+          <option value="id">ID do Paciente</option>
+          <option value="nome">Nome</option>
+          <option value="cpf">CPF</option>
+          <option value="nascimento">Data de Nascimento</option>
+          <option value="telefone">Telefone</option>
+          <option value="endereco">Endereço</option>
+          <option value="peso">Peso</option>
+          <option value="altura">Altura</option>
+        </select>
+      </div>
+      <div class="col-md-7">
+        <input type="text" id="busca-paciente-valor" class="form-control form-control-sm" placeholder="Buscar paciente...">
+      </div>
+      <div class="col-md-2 d-grid">
+        <button type="submit" class="btn btn-primary btn-sm">
+          <i class="bi bi-search"></i> Buscar
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+  <div class="table-responsive">
+    <table class="table table-striped mt-3 align-middle" id="tabelaPacientesMain">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Nome</th>
+          <th>CPF</th>
+          <th>Data Nasc.</th>
+          <th>Peso (kg)</th>
+          <th>Altura (m)</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        </tbody>
+    </table>
+  </div>
+</section>
+
     <!-- AGENDAR CONSULTA -->
     <section id="agendar" class="conteudo-secao">
       <h4 class="fw-bold text-primary">Agendar Consulta</h4>
@@ -183,6 +237,35 @@
     <!-- LISTAR CONSULTAS -->
     <section id="consultas" class="conteudo-secao escondido">
       <h4 class="fw-bold text-primary">Listar Consultas</h4>
+
+      <div class="card bg-light mb-3 border-0">
+  <div class="card-body p-2">
+    <form id="formBuscaConsulta" class="row g-2 align-items-center">
+      <div class="col-md-3">
+        <select id="busca-campo" class="form-select form-select-sm">
+          <option value="id">ID da Consulta</option>
+          <option value="paciente_nome">Nome do Paciente</option>
+          <option value="medico_id">ID Médico</option>
+          <option value="paciente_contato">Contato</option>
+          <option value="cpf">CPF</option>
+          <option value="datahora">Data</option>
+          <option value="observacoes">Observações</option>
+          <option value="status">Status</option>
+          <option value="pagamento">Forma de Pagamento</option>
+        </select>
+      </div>
+      <div class="col-md-7">
+        <input type="text" id="busca-valor" class="form-control form-control-sm" placeholder="Digite o que procura...">
+      </div>
+      <div class="col-md-2 d-grid">
+        <button type="submit" class="btn btn-primary btn-sm">
+          <i class="bi bi-search"></i> Buscar
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+      
       <div class="table-responsive">
         <table class="table table-striped mt-3 align-middle" id="tabelaConsultas">
           <thead>
