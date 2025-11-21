@@ -109,6 +109,7 @@ navLinks.forEach(link => {
     let pacientesCache = [];
     let pacientesFiltrados = [];
     let consultasPage = 1;
+    let pacientesPage = 1;
 
     // criar modal de pacientes dinamicamente (para não alterar HTML)
     function criarModalPacientes() {
@@ -182,37 +183,87 @@ function renderizarTabelaPacientesMain() {
       if (!tabelaPacientesBody) return;
       tabelaPacientesBody.innerHTML = '';
 
-      // AGORA USA A LISTA FILTRADA
-      if (pacientesFiltrados.length === 0) {
-        tabelaPacientesBody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Nenhum paciente encontrado na busca.</td></tr>';
-        return;
+      // 1. CALCULAR PAGINAÇÃO
+      const totalItems = pacientesFiltrados.length;
+      const totalPages = Math.max(1, Math.ceil(totalItems / ITEMS_PER_PAGE));
+
+      // Segurança: se estamos na pág 2 e filtramos algo que só tem 1 pág, volta pra 1
+      if (pacientesPage > totalPages) pacientesPage = 1;
+
+      const start = (pacientesPage - 1) * ITEMS_PER_PAGE;
+      const pageItems = pacientesFiltrados.slice(start, start + ITEMS_PER_PAGE);
+
+      // 2. DESENHAR AS LINHAS (Igual antes, mas usando pageItems)
+      if (pageItems.length === 0) {
+        tabelaPacientesBody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Nenhum paciente encontrado.</td></tr>';
+      } else {
+        pageItems.forEach(p => {
+          const tr = document.createElement('tr');
+          
+          let nascFormatado = p.nascimento;
+          try {
+             if(p.nascimento && p.nascimento.includes('-')) {
+               const [ano, mes, dia] = p.nascimento.split('-');
+               nascFormatado = `${dia}/${mes}/${ano}`;
+             }
+          } catch(e){}
+
+          tr.innerHTML = `
+            <td>${p.id || '-'}</td>
+            <td>${p.nome}</td>
+            <td>${p.cpf}</td>
+            <td>${nascFormatado}</td>
+            <td>${p.peso}</td>
+            <td>${p.altura}</td>
+            <td>
+              <button class="btn btn-sm btn-primary btn-edit-paciente-main" data-cpf="${p.cpf}">Editar</button>
+              <button class="btn btn-sm btn-danger btn-delete-paciente-main" data-cpf="${p.cpf}">Excluir</button>
+            </td>
+          `;
+          tabelaPacientesBody.appendChild(tr);
+        });
       }
 
-      pacientesFiltrados.forEach(p => {
-        const tr = document.createElement('tr');
-        
-        // Formatação da data para exibição (para ficar bonito na tabela)
-        let nascFormatado = p.nascimento;
-        try {
-           if(p.nascimento && p.nascimento.includes('-')) {
-             const [ano, mes, dia] = p.nascimento.split('-');
-             nascFormatado = `${dia}/${mes}/${ano}`;
-           }
-        } catch(e){}
+      // 3. CRIAR BARRA DE PAGINAÇÃO (PAGER)
+      // Remove o pager antigo se existir para não duplicar
+      let pager = document.getElementById('pacientesPager');
+      if (pager) pager.remove();
 
-        tr.innerHTML = `
-          <td>${p.id || '-'}</td>
-          <td>${p.nome}</td>
-          <td>${p.cpf}</td>
-          <td>${nascFormatado}</td>
-          <td>${p.peso}</td>
-          <td>${p.altura}</td>
-          <td>
-            <button class="btn btn-sm btn-primary btn-edit-paciente-main" data-cpf="${p.cpf}">Editar</button>
-            <button class="btn btn-sm btn-danger btn-delete-paciente-main" data-cpf="${p.cpf}">Excluir</button>
-          </td>
-        `;
-        tabelaPacientesBody.appendChild(tr);
+      // Onde vamos inserir o pager? Logo após a div .table-responsive
+      const tableResponsiveDiv = document.getElementById('tabelaPacientesMain').parentElement;
+      
+      pager = document.createElement('div');
+      pager.id = 'pacientesPager';
+      pager.className = 'd-flex justify-content-between align-items-center mt-2'; // Estilo Bootstrap
+      
+      const endItem = Math.min(totalItems, start + pageItems.length);
+      const startItem = totalItems === 0 ? 0 : start + 1;
+
+      pager.innerHTML = `
+        <div class="text-muted">Mostrando ${startItem} - ${endItem} de ${totalItems}</div>
+        <div>
+          <button class="btn btn-sm btn-outline-secondary me-1" id="prevPagePac" ${pacientesPage <= 1 ? 'disabled' : ''}>Anterior</button>
+          <span class="mx-2">Página ${pacientesPage} / ${totalPages}</span>
+          <button class="btn btn-sm btn-outline-secondary ms-1" id="nextPagePac" ${pacientesPage >= totalPages ? 'disabled' : ''}>Próxima</button>
+        </div>
+      `;
+
+      // Insere o pager na tela
+      tableResponsiveDiv.parentElement.appendChild(pager);
+
+      // 4. EVENTOS DOS BOTÕES (Anterior / Próxima)
+      document.getElementById('prevPagePac').addEventListener('click', () => {
+        if (pacientesPage > 1) {
+          pacientesPage--;
+          renderizarTabelaPacientesMain();
+        }
+      });
+      
+      document.getElementById('nextPagePac').addEventListener('click', () => {
+        if (pacientesPage < totalPages) {
+          pacientesPage++;
+          renderizarTabelaPacientesMain();
+        }
       });
     }
 
@@ -244,6 +295,8 @@ function renderizarTabelaPacientesMain() {
           });
         }
 
+        // === AQUI ESTÁ A MUDANÇA ===
+        pacientesPage = 1; // Reseta para a primeira página sempre que buscar
         renderizarTabelaPacientesMain();
       });
     }
@@ -452,7 +505,7 @@ if (tabelaPacientesBody) {
       const pageItems = consultasFiltradas.slice(start, start + ITEMS_PER_PAGE);
 
       if (pageItems.length === 0) {
-        tabelaConsultasBody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">Nenhuma consulta encontrada na busca.</td></tr>';
+        tabelaConsultasBody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">Nenhuma consulta encontrada.</td></tr>';
       } else {
         pageItems.forEach(c => {
           const tr = document.createElement('tr');
