@@ -22,7 +22,7 @@
   "pacientes": [
     {
       "id": 11,
-      "nome": "Ant Gabriel Amaro De Assis",
+      "nome": "Ant Gabriel Amaro De ",
       "cpf": "12",
       "nascimento": "2025-11-20",
       "telefone": "88996329560",
@@ -88,7 +88,7 @@
       "cpf": "12",
       "datahora": "2025-11-20T19:56",
       "observacoes": "Vai fazer uns exame ai",
-      "status": "Concluído",
+      "status": "Cancelado",
       "pagamento": "Dinheiro"
     },
     {
