@@ -259,7 +259,7 @@ def api_consulta_update(cid):
 
 
 # ========================
-# EXECUÇÃO
+# EXECUÇÃO 
 # ========================
 if __name__ == '__main__':
     init_db()

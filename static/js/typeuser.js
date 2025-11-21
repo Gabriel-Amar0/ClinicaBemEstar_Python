@@ -291,7 +291,7 @@ function renderizarTabelaPacientesMain() {
             }
 
             const valorString = String(valorOriginal || '').toLowerCase();
-            return valorString.includes(termo);
+            return valorString.includes(termo); 
           });
         }
 
