@@ -1,859 +1,523 @@
-document.addEventListener('DOMContentLoaded', function() {
-  // ============================
-  // CONFIGURAÇÃO DO TOAST
-  // ============================
-  const toastEl = document.getElementById('toastSuccess');
-  const toastBody = document.getElementById('toastMessage');
-  const toast = toastEl ? new bootstrap.Toast(toastEl) : null;
+document.addEventListener('DOMContentLoaded', () => {
+    // =========================================================
+    // 0. UTILITÁRIOS GLOBAIS (TOAST)
+    // =========================================================
+    const toastEl = document.getElementById('toastAviso') || document.getElementById('toastSuccess'); 
+    let toastInstance = null;
+    let toastBody = document.getElementById('toast-msg') || document.getElementById('toastMessage');
 
-  function mostrarToast(mensagem, tipo = 'success') {
-    if (!toastEl || !toastBody) return alert(mensagem); // fallback
-    // preservar classes úteis e garantir apenas mudança do tema
-    toastEl.className = `toast align-items-center text-bg-${tipo} border-0`;
-    toastBody.textContent = mensagem;
-    toast.show();
-  }
-
-  // ============================
-  // LOGIN (mantive seu código)
-  // ============================
-  const roleAtendente = document.getElementById('roleAtendente');
-  const roleMedico = document.getElementById('roleMedico');
-  const loginForm = document.getElementById('loginForm');
-
-  if (roleAtendente && roleMedico && loginForm) {
-    let userRole = '';
-
-    roleAtendente.addEventListener('click', () => {
-      userRole = 'Atendente';
-      roleAtendente.classList.add('active-role');
-      roleMedico.classList.remove('active-role');
-    });
-
-    roleMedico.addEventListener('click', () => {
-      userRole = 'Medico';
-      roleMedico.classList.add('active-role');
-      roleAtendente.classList.remove('active-role');
-    });
-
-    loginForm.addEventListener('submit', async function(e) {
-      e.preventDefault();
-      const email = document.getElementById('email').value.trim();
-      const senha = document.getElementById('senha').value.trim();
-
-      if (!userRole) {
-        mostrarToast('Selecione o tipo de usuário antes de entrar!', 'warning');
-        return;
-      }
-
-      try {
-        const res = await fetch('/api/login', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({role: userRole, email, senha})
-        });
-
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.message || 'Erro ao logar');
-        window.location.href = json.redirect;
-      } catch (err) {
-        mostrarToast(err.message, 'danger');
-      }
-    });
-  }
-
-  // ============================
-// NAVEGAÇÃO ENTRE SEÇÕES (Atualizado)
-// ============================
-const navLinks = document.querySelectorAll('nav .nav-link');
-const sections = document.querySelectorAll('.conteudo-secao');
-
-navLinks.forEach(link => {
-  link.addEventListener('click', function(e) {
-    e.preventDefault();
-    navLinks.forEach(l => l.classList.remove('active'));
-    this.classList.add('active');
-    sections.forEach(sec => sec.classList.add('escondido'));
-
-    const texto = this.textContent;
-
-    if (texto.includes('Agendar')) {
-      document.getElementById('agendar').classList.remove('escondido');
-    } else if (texto.includes('Cadastrar')) {
-      document.getElementById('cadastro').classList.remove('escondido');
-    } else if (texto.includes('Listar Consultas')) { // Ajustado para ser específico
-      document.getElementById('consultas').classList.remove('escondido');
-    } else if (texto.includes('Listar Pacientes')) { // NOVA LÓGICA
-      document.getElementById('listar-pacientes').classList.remove('escondido');
-    }
-  });
-});
-
-  // ============================
-  // ATENDENTE: PACIENTES & CONSULTAS
-  // ============================
-  if (document.getElementById('formCadastro')) {
-    const formCadastro = document.getElementById('formCadastro');
-    const formAgendar = document.getElementById('formAgendar');
-    const selectPaciente = document.getElementById('form-paciente');
-    const tabelaPacientesBody = document.querySelector('#tabelaPacientesMain tbody');
-    const tabelaConsultasBody = document.querySelector('#tabelaConsultas tbody');
-    const formEditar = document.getElementById('formEditar');
-    let consultaEditando = null;
-    let pacienteEditandoCPF = null;
-
-    // ====== Config paginação ======
-    const ITEMS_PER_PAGE = 5;
-    let consultasCache = []; // cache local para checagens e paginação
-    let consultasFiltradas = [];
-    let pacientesCache = [];
-    let pacientesFiltrados = [];
-    let consultasPage = 1;
-    let pacientesPage = 1;
-
-    // criar modal de pacientes dinamicamente (para não alterar HTML)
-    function criarModalPacientes() {
-      if (document.getElementById('modalPacientes')) return;
-      const modalHtml = `
-      <div class="modal fade" id="modalPacientes" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-centered">
-          <div class="modal-content">
-            <div class="modal-header bg-primary text-white">
-              <h5 class="modal-title">Pacientes Cadastrados</h5>
-              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-              <div id="listaPacientesContainer" class="table-responsive">
-                <!-- tabela injetada por JS -->
-              </div>
-            </div>
-            <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
-            </div>
-          </div>
-        </div>
-      </div>`;
-      document.body.insertAdjacentHTML('beforeend', modalHtml);
+    if (toastEl) {
+        toastInstance = new bootstrap.Toast(toastEl);
     }
 
-    // injetar botão "Ver Pacientes" abaixo do form de cadastro (sem alterar HTML original)
-    function inserirBotaoVerPacientes() {
-      const existing = document.getElementById('btnVerPacientes');
-      if (existing) return;
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.id = 'btnVerPacientes';
-      btn.className = 'btn btn-outline-primary mt-3';
-      btn.textContent = 'Ver Pacientes';
-     
-    }
-
-    // carrega pacientes do servidor e popula select e cache
-    async function loadPacientes() {
-      try {
-        const res = await fetch('/api/pacientes');
-        const pacs = await res.json();
-        pacientesCache = pacs || [];
+    function mostrarNotificacao(mensagem, tipo = 'success') {
+        if (!toastInstance) {
+            // Se não houver elemento de toast na tela (ex: tela de login simples), 
+            // ignoramos mensagens de sucesso e usamos alert para erro.
+            if (tipo === 'error' || tipo === 'warning') alert(mensagem);
+            return;
+        }
+        if (toastBody) toastBody.innerText = mensagem;
+        toastEl.classList.remove('bg-success', 'bg-danger', 'bg-warning', 'text-bg-success', 'text-bg-danger', 'text-bg-warning');
         
-        // INICIALIZA A LISTA FILTRADA COM TUDO QUE VEIO DO BANCO
-        pacientesFiltrados = [...pacientesCache];
+        if (tipo === 'success') toastEl.classList.add('bg-success', 'text-white');
+        if (tipo === 'error' || tipo === 'danger') toastEl.classList.add('bg-danger', 'text-white');
+        if (tipo === 'warning') toastEl.classList.add('bg-warning', 'text-dark');
+        
+        toastInstance.show();
+    }
 
-        // Atualiza o select do Agendamento
-        if (selectPaciente) {
-            selectPaciente.innerHTML = '<option value="" selected disabled>Selecione</option>';
-            pacs.forEach(p => {
-              const opt = document.createElement('option');
-              opt.value = p.cpf;
-              opt.textContent = `${p.nome} (CPF: ${p.cpf})`;
-              selectPaciente.appendChild(opt);
+    // =========================================================
+    // 1. LÓGICA DA TELA DE LOGIN
+    // =========================================================
+    const loginForm = document.getElementById('loginForm');
+    
+    if (loginForm) {
+        console.log("Tela de Login detectada.");
+        
+        const roleAtendente = document.getElementById('roleAtendente');
+        const roleMedico = document.getElementById('roleMedico');
+        let userRole = '';
+
+        if (roleAtendente && roleMedico) {
+            // --- CLIQUE NO ATENDENTE ---
+            roleAtendente.addEventListener('click', () => {
+                userRole = 'Atendente';
+                // Ativa Atendente (AZUL)
+                roleAtendente.classList.add('active-role', 'bg-primary', 'text-white', 'border-primary');
+                roleAtendente.classList.remove('bg-light', 'text-dark');
+                // Desativa Médico
+                roleMedico.classList.remove('active-role', 'bg-primary', 'text-white', 'border-primary');
+                roleMedico.classList.add('bg-light', 'text-dark');
+            });
+
+            // --- CLIQUE NO MÉDICO ---
+            roleMedico.addEventListener('click', () => {
+                userRole = 'Medico';
+                // Ativa Médico (AZUL)
+                roleMedico.classList.add('active-role', 'bg-primary', 'text-white', 'border-primary');
+                roleMedico.classList.remove('bg-light', 'text-dark');
+                // Desativa Atendente
+                roleAtendente.classList.remove('active-role', 'bg-primary', 'text-white', 'border-primary');
+                roleAtendente.classList.add('bg-light', 'text-dark');
             });
         }
 
-        renderizarTabelaPacientesMain();
-        // Se o modal antigo estiver aberto, atualiza ele também
-        if (typeof montarTabelaPacientes === 'function') montarTabelaPacientes(); 
+        loginForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const email = document.getElementById('email').value.trim();
+            const senha = document.getElementById('senha').value.trim();
 
-      } catch (err) {
-        console.error('Erro ao carregar pacientes:', err);
-      }
-    }
-
-    // Função para renderizar a tabela na seção principal
-function renderizarTabelaPacientesMain() {
-      if (!tabelaPacientesBody) return;
-      tabelaPacientesBody.innerHTML = '';
-
-      // 1. CALCULAR PAGINAÇÃO
-      const totalItems = pacientesFiltrados.length;
-      const totalPages = Math.max(1, Math.ceil(totalItems / ITEMS_PER_PAGE));
-
-      // Segurança: se estamos na pág 2 e filtramos algo que só tem 1 pág, volta pra 1
-      if (pacientesPage > totalPages) pacientesPage = 1;
-
-      const start = (pacientesPage - 1) * ITEMS_PER_PAGE;
-      const pageItems = pacientesFiltrados.slice(start, start + ITEMS_PER_PAGE);
-
-      // 2. DESENHAR AS LINHAS (Igual antes, mas usando pageItems)
-      if (pageItems.length === 0) {
-        tabelaPacientesBody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Nenhum paciente encontrado.</td></tr>';
-      } else {
-        pageItems.forEach(p => {
-          const tr = document.createElement('tr');
-          
-          let nascFormatado = p.nascimento;
-          try {
-             if(p.nascimento && p.nascimento.includes('-')) {
-               const [ano, mes, dia] = p.nascimento.split('-');
-               nascFormatado = `${dia}/${mes}/${ano}`;
-             }
-          } catch(e){}
-
-          tr.innerHTML = `
-            <td>${p.id || '-'}</td>
-            <td>${p.nome}</td>
-            <td>${p.cpf}</td>
-            <td>${nascFormatado}</td>
-            <td>${p.peso}</td>
-            <td>${p.altura}</td>
-            <td>
-              <button class="btn btn-sm btn-primary btn-edit-paciente-main" data-cpf="${p.cpf}">Editar</button>
-              <button class="btn btn-sm btn-danger btn-delete-paciente-main" data-cpf="${p.cpf}">Excluir</button>
-            </td>
-          `;
-          tabelaPacientesBody.appendChild(tr);
-        });
-      }
-
-      // 3. CRIAR BARRA DE PAGINAÇÃO (PAGER)
-      // Remove o pager antigo se existir para não duplicar
-      let pager = document.getElementById('pacientesPager');
-      if (pager) pager.remove();
-
-      // Onde vamos inserir o pager? Logo após a div .table-responsive
-      const tableResponsiveDiv = document.getElementById('tabelaPacientesMain').parentElement;
-      
-      pager = document.createElement('div');
-      pager.id = 'pacientesPager';
-      pager.className = 'd-flex justify-content-between align-items-center mt-2'; // Estilo Bootstrap
-      
-      const endItem = Math.min(totalItems, start + pageItems.length);
-      const startItem = totalItems === 0 ? 0 : start + 1;
-
-      pager.innerHTML = `
-        <div class="text-muted">Mostrando ${startItem} - ${endItem} de ${totalItems}</div>
-        <div>
-          <button class="btn btn-sm btn-outline-secondary me-1" id="prevPagePac" ${pacientesPage <= 1 ? 'disabled' : ''}>Anterior</button>
-          <span class="mx-2">Página ${pacientesPage} / ${totalPages}</span>
-          <button class="btn btn-sm btn-outline-secondary ms-1" id="nextPagePac" ${pacientesPage >= totalPages ? 'disabled' : ''}>Próxima</button>
-        </div>
-      `;
-
-      // Insere o pager na tela
-      tableResponsiveDiv.parentElement.appendChild(pager);
-
-      // 4. EVENTOS DOS BOTÕES (Anterior / Próxima)
-      document.getElementById('prevPagePac').addEventListener('click', () => {
-        if (pacientesPage > 1) {
-          pacientesPage--;
-          renderizarTabelaPacientesMain();
-        }
-      });
-      
-      document.getElementById('nextPagePac').addEventListener('click', () => {
-        if (pacientesPage < totalPages) {
-          pacientesPage++;
-          renderizarTabelaPacientesMain();
-        }
-      });
-    }
-
-    // LÓGICA DE BUSCA DE PACIENTES
-    const formBuscaPac = document.getElementById('formBuscaPaciente');
-    if (formBuscaPac) {
-      formBuscaPac.addEventListener('submit', (e) => {
-        e.preventDefault();
-        
-        const campo = document.getElementById('busca-paciente-campo').value;
-        const termo = document.getElementById('busca-paciente-valor').value.trim().toLowerCase();
-
-        if (termo === '') {
-          pacientesFiltrados = [...pacientesCache];
-        } else {
-          pacientesFiltrados = pacientesCache.filter(p => {
-            let valorOriginal = p[campo];
-
-            // TRUQUE DA DATA:
-            // O banco guarda "2000-01-25", mas o usuário busca por "25/01/2000"
-            // Convertemos para o formato brasileiro antes de comparar
-            if (campo === 'nascimento' && valorOriginal && valorOriginal.includes('-')) {
-                 const [ano, mes, dia] = valorOriginal.split('-');
-                 valorOriginal = `${dia}/${mes}/${ano}`;
+            if (!userRole) {
+                alert('Selecione se você é Médico ou Atendente!');
+                return;
             }
 
-            const valorString = String(valorOriginal || '').toLowerCase();
-            return valorString.includes(termo); 
-          });
-        }
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({role: userRole, email, senha})
+                });
 
-        // === AQUI ESTÁ A MUDANÇA ===
-        pacientesPage = 1; // Reseta para a primeira página sempre que buscar
-        renderizarTabelaPacientesMain();
-      });
-    }
-
-if (tabelaPacientesBody) {
-    tabelaPacientesBody.addEventListener('click', async (e) => {
-      
-      // 1. Lógica do botão EXCLUIR
-      if (e.target.classList.contains('btn-delete-paciente-main')) {
-        const cpf = e.target.dataset.cpf;
-        if (!confirm('Confirma exclusão do paciente?')) return;
-        
-        try {
-          const res = await fetch(`/api/pacientes/${encodeURIComponent(cpf)}`, { method: 'DELETE' });
-          if (res.ok) {
-            mostrarToast('Paciente excluído com sucesso!', 'success');
-            await atualizarTudoImediato(); // Recarrega a lista
-          } else {
-            mostrarToast('Erro ao excluir paciente', 'danger');
-          }
-        } catch (err) {
-          console.error(err);
-          mostrarToast('Erro de conexão', 'danger');
-        }
-      }
-
-      // 2. Lógica do botão EDITAR
-      if (e.target.classList.contains('btn-edit-paciente-main')) {
-        const cpf = e.target.dataset.cpf;
-        // Busca os dados completos do paciente no cache
-        const paciente = pacientesCache.find(p => p.cpf === cpf);
-        
-        if (paciente) {
-          // Reutiliza a função que já existe para abrir o modal!
-          abrirModalEditarPaciente(paciente); 
-        }
-      }
-    });
-  }
-
-
-    // montar tabela de pacientes dentro do modal
-    function montarTabelaPacientes() {
-      const container = document.getElementById('listaPacientesContainer');
-      if (!container) return;
-      const rows = pacientesCache.map(p => {
-        return `
-        <tr data-cpf="${p.cpf}">
-          <td>${p.nome}</td>
-          <td>${p.cpf}</td>
-          <td>${p.telefone || ''}</td>
-          <td>${p.nascimento || ''}</td>
-          <td>
-            <button class="btn btn-sm btn-primary btn-edit-paciente" data-cpf="${p.cpf}">Editar</button>
-            <button class="btn btn-sm btn-danger btn-delete-paciente" data-cpf="${p.cpf}">Excluir</button>
-          </td>
-        </tr>`;
-      }).join('');
-
-      container.innerHTML = `
-        <table class="table table-striped">
-          <thead>
-            <tr><th>Nome</th><th>CPF</th><th>Contato</th><th>Nascimento</th><th>Ações</th></tr>
-          </thead>
-          <tbody>
-            ${rows || '<tr><td colspan="5" class="text-center">Nenhum paciente cadastrado</td></tr>'}
-          </tbody>
-        </table>
-      `;
-
-      // anexar listeners para editar/excluir
-      container.querySelectorAll('.btn-delete-paciente').forEach(btn => {
-        btn.addEventListener('click', async (ev) => {
-          const cpf = ev.currentTarget.dataset.cpf;
-          if (!confirm('Confirma exclusão do paciente? Isso também pode afetar consultas vinculadas.')) return;
-          try {
-            const res = await fetch(`/api/pacientes/${encodeURIComponent(cpf)}`, { method: 'DELETE' });
-            if (res.ok) {
-              mostrarToast('Paciente excluído com sucesso!', 'success');
-              await atualizarTudoImediato();
-            } else {
-              mostrarToast('Erro ao excluir paciente', 'danger');
+                const json = await res.json();
+                if (!res.ok) throw new Error(json.message || 'Erro ao logar');
+                
+                // ✅ SUCESSO: Redireciona imediatamente (sem aviso)
+                window.location.href = json.redirect;
+                
+            } catch (err) {
+                console.error(err);
+                alert(err.message); // Alerta simples para erro no login
             }
-          } catch (err) {
-            console.error(err);
-            mostrarToast('Erro ao excluir paciente', 'danger');
-          }
         });
-      });
 
-      container.querySelectorAll('.btn-edit-paciente').forEach(btn => {
-        btn.addEventListener('click', (ev) => {
-          const cpf = ev.currentTarget.dataset.cpf;
-          const paciente = pacientesCache.find(p => p.cpf === cpf);
-          if (!paciente) return;
-          abrirModalEditarPaciente(paciente);
-        });
-      });
+        return; // PARE AQUI SE FOR TELA DE LOGIN
     }
 
-    // cria modal de edição de paciente (reutilizável)
-    function abrirModalEditarPaciente(paciente) {
-      const form = document.getElementById('formEditarPaciente');
-      if (!form) return;
+    // =========================================================
+    // 2. LÓGICA DO PAINEL DO ATENDENTE
+    // =========================================================
+    const abas = document.querySelectorAll('.nav-link');
+    if (abas.length === 0) return; 
 
-      // Guarda o CPF original para usar na URL depois
-      pacienteEditandoCPF = paciente.cpf;
-
-      // Preencher campos
-      document.getElementById('edit-paciente-nome').value = paciente.nome || '';
-      document.getElementById('edit-paciente-cpf').value = paciente.cpf || '';
-      document.getElementById('edit-paciente-nasc').value = paciente.nascimento || '';
-      document.getElementById('edit-paciente-telefone').value = paciente.telefone || '';
-      document.getElementById('edit-paciente-endereco').value = paciente.endereco || '';
-      document.getElementById('edit-paciente-peso').value = paciente.peso || '';
-      document.getElementById('edit-paciente-altura').value = paciente.altura || '';
-
-      const modal = new bootstrap.Modal(document.getElementById('modalEditarPaciente'), {
-        backdrop: 'static',
-        keyboard: false
-      });
-      modal.show();
-    }
-
+    const secoes = document.querySelectorAll('.conteudo-secao');
+    
+    // Modais e Forms
+    const modalEditar = document.getElementById('modalEditar') ? new bootstrap.Modal(document.getElementById('modalEditar')) : null;
+    const formEditar = document.getElementById('formEditar');
+    const modalEditarPaciente = document.getElementById('modalEditarPaciente') ? new bootstrap.Modal(document.getElementById('modalEditarPaciente')) : null;
     const formEditarPaciente = document.getElementById('formEditarPaciente');
-    if (formEditarPaciente) {
-      formEditarPaciente.addEventListener('submit', async (ev) => {
-        ev.preventDefault();
-        
-        if (!pacienteEditandoCPF) return; 
 
-        const payload = {
-          nome: document.getElementById('edit-paciente-nome').value,
-          cpf: document.getElementById('edit-paciente-cpf').value, 
-          nascimento: document.getElementById('edit-paciente-nasc').value,
-          telefone: document.getElementById('edit-paciente-telefone').value,
-          endereco: document.getElementById('edit-paciente-endereco').value,
-          peso: document.getElementById('edit-paciente-peso').value,
-          altura: document.getElementById('edit-paciente-altura').value
-        };
+    // Variáveis de Estado
+    let consultasCache = [];
+    let pacientesCache = [];
+    const itensPorPagina = 5;
+    let consultasFiltradas = [];
+    let paginaAtualConsultas = 1;
+    let pacientesFiltrados = [];
+    let paginaAtualPacientes = 1;
 
-        try {
-          // Usa o CPF antigo na URL para achar o registro correto
-          const res = await fetch(`/api/pacientes/${encodeURIComponent(pacienteEditandoCPF)}`, {
-            method: 'PUT',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(payload)
-          });
+    // --- NAVEGAÇÃO ABAS ---
+    abas.forEach(tab => {
+        tab.addEventListener('click', (e) => {
+            e.preventDefault();
+            abas.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
 
-          if (res.ok) {
-            mostrarToast('Paciente atualizado com sucesso!', 'success');
+            secoes.forEach(sec => sec.classList.add('escondido'));
             
-            // Fechar modal e limpar variável
-            const modalEl = document.getElementById('modalEditarPaciente');
-            const modalInst = bootstrap.Modal.getInstance(modalEl);
-            if (modalInst) modalInst.hide();
-            
-            pacienteEditandoCPF = null; // Boa prática: limpar após uso
-            await atualizarTudoImediato(); 
-          } else {
-            const err = await res.json();
-            mostrarToast(err.message || 'Erro ao atualizar paciente', 'danger');
-          }
-        } catch (err) {
-          console.error(err);
-          mostrarToast('Erro de conexão', 'danger');
-        }
-      });
-    }
+            const idAlvo = tab.getAttribute('data-aba');
+            const alvo = document.getElementById(idAlvo);
+            if(alvo) alvo.classList.remove('escondido');
 
-    // carregar consultas do servidor e popular tabela com paginação
-    async function loadConsultas(page = 1) {
-      try {
-        const res = await fetch('/api/consultas');
-        const consultas = await res.json();
-        consultasCache = consultas || [];
-        
-        // Se não houver busca ativa, a lista filtrada é igual à original
-        consultasFiltradas = [...consultasCache]; 
-        
-        consultasPage = page;
-        renderConsultasPage(); // Agora chama o render usando a lista filtrada
-      } catch (err) {
-        console.error('Erro ao carregar consultas:', err);
-      }
-    }
-
-    function renderConsultasPage() {
-      tabelaConsultasBody.innerHTML = '';
-      
-      // Usamos consultasFiltradas para saber o total
-      const totalItems = consultasFiltradas.length;
-      const totalPages = Math.max(1, Math.ceil(totalItems / ITEMS_PER_PAGE));
-
-      if (consultasCache.length === 0) {
-        tabelaConsultasBody.innerHTML = '<tr><td colspan="11" class="text-center">Nenhuma consulta cadastrada.</td></tr>';
-        return;
-      }
-
-      // Ajuste de segurança se a busca reduzir as páginas e estivermos numa página alta
-      if (consultasPage > totalPages) consultasPage = 1;
-
-      const start = (consultasPage - 1) * ITEMS_PER_PAGE;
-      
-      // O "slice" agora é feito na lista FILTRADA
-      const pageItems = consultasFiltradas.slice(start, start + ITEMS_PER_PAGE);
-
-      if (pageItems.length === 0) {
-        tabelaConsultasBody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">Nenhuma consulta encontrada.</td></tr>';
-      } else {
-        pageItems.forEach(c => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${c.id}</td>
-            <td>${c.medico_id}</td>
-            <td>${c.paciente_nome || ''}</td>
-            <td>${c.paciente_contato || ''}</td>
-            <td>${c.cpf}</td>
-            <td>${formataDataHoraParaExibir(c.datahora)}</td>
-            <td>${c.observacoes}</td>
-            <td>${c.status}</td>
-            <td>
-              <button class="btn btn-sm btn-primary btn-edit" data-id="${c.id}">Editar</button>
-              <button class="btn btn-sm btn-danger btn-delete" data-id="${c.id}">Excluir</button>
-            </td>
-          `;
-          tabelaConsultasBody.appendChild(tr);
+            if (idAlvo === 'consultas') loadConsultas();
+            if (idAlvo === 'listar-pacientes') loadPacientesLista();
+            if (idAlvo === 'agendar') carregarSelectPacientes(); 
         });
-      }
+    });
 
-      // Pager (Atualizado para usar consultasFiltradas)
-      const tableWrapper = document.getElementById('tabelaConsultas').parentElement;
-      let pager = document.getElementById('consultasPager');
-      if (pager) pager.remove();
-      
-      pager = document.createElement('div');
-      pager.id = 'consultasPager';
-      pager.className = 'd-flex justify-content-between align-items-center mt-2';
-      
-      // Texto de exibição corrigido
-      const endItem = Math.min(totalItems, start + pageItems.length);
-      const startItem = totalItems === 0 ? 0 : start + 1;
-
-      pager.innerHTML = `
-        <div>Mostrando ${startItem} - ${endItem} de ${totalItems}</div>
-        <div>
-          <button class="btn btn-sm btn-outline-secondary me-1" id="prevPage" ${consultasPage <= 1 ? 'disabled' : ''}>Anterior</button>
-          <span class="mx-2">Página ${consultasPage} / ${totalPages}</span>
-          <button class="btn btn-sm btn-outline-secondary ms-1" id="nextPage" ${consultasPage >= totalPages ? 'disabled' : ''}>Próxima</button>
-        </div>
-      `;
-      tableWrapper.parentElement.appendChild(pager);
-
-      document.getElementById('prevPage').addEventListener('click', () => {
-        if (consultasPage > 1) {
-          consultasPage--;
-          renderConsultasPage();
-        }
-      });
-      document.getElementById('nextPage').addEventListener('click', () => {
-        if (consultasPage < totalPages) {
-          consultasPage++;
-          renderConsultasPage();
-        }
-      });
+    // --- API ---
+    async function fetchPacientes() {
+        try {
+            const res = await fetch('/api/pacientes');
+            pacientesCache = await res.json();
+            return pacientesCache;
+        } catch (err) { console.error(err); return []; }
     }
 
-    // LOGICA DE BUSCA DE CONSULTAS
-    const formBusca = document.getElementById('formBuscaConsulta');
-    if (formBusca) {
-      formBusca.addEventListener('submit', (e) => {
-        e.preventDefault();
-        
-        const campo = document.getElementById('busca-campo').value; // ex: paciente_nome
-        const termo = document.getElementById('busca-valor').value.trim().toLowerCase();
+    async function carregarSelectPacientes() {
+        await fetchPacientes();
+        const select = document.getElementById('form-paciente');
+        if(!select) return;
+        select.innerHTML = '<option value="" selected disabled>Selecione</option>';
+        pacientesCache.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.cpf; 
+            opt.textContent = `${p.nome} (CPF: ${p.cpf})`;
+            select.appendChild(opt);
+        });
+    }
 
-        // Se o campo estiver vazio, restaura a lista completa
-        if (termo === '') {
-          consultasFiltradas = [...consultasCache];
-        } else {
-          // Filtra o consultasCache
-          consultasFiltradas = consultasCache.filter(c => {
-            // Pega o valor do objeto (ex: c.paciente_nome)
-            let valorOriginal = c[campo];
-            
-            // Tratamento especial para data (se o usuário digitar parte da data)
-            if (campo === 'datahora') {
-               valorOriginal = formataDataHoraParaExibir(c.datahora);
+    // --- CADASTRO ---
+    const formCadastro = document.getElementById('formCadastro');
+    if(formCadastro) {
+        formCadastro.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const paciente = {
+                nome: document.getElementById('paciente-nome').value,
+                cpf: document.getElementById('paciente-cpf').value,
+                nascimento: document.getElementById('paciente-nascimento').value,
+                telefone: document.getElementById('paciente-telefone').value,
+                endereco: document.getElementById('paciente-endereco').value,
+                peso: document.getElementById('paciente-peso').value,
+                altura: document.getElementById('paciente-altura').value
+            };
+            try {
+                const res = await fetch('/api/pacientes', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(paciente)
+                });
+                if(res.ok) {
+                    mostrarNotificacao('Paciente cadastrado!');
+                    formCadastro.reset();
+                    fetchPacientes(); 
+                } else {
+                    const erro = await res.json();
+                    mostrarNotificacao(erro.message || 'Erro.', 'error');
+                }
+            } catch(err) { console.error(err); }
+        });
+    }
+
+    // --- AGENDAR ---
+    const formAgendar = document.getElementById('formAgendar');
+    if(formAgendar) {
+        formAgendar.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const consulta = {
+                cpf: document.getElementById('form-paciente').value,
+                medico_id: document.getElementById('form-medico').value,
+                datahora: document.getElementById('form-datahora').value,
+                pagamento: document.getElementById('form-pagamento').value,
+                observacoes: document.getElementById('form-obs').value,
+                status: 'Agendado'
+            };
+            try {
+                const res = await fetch('/api/consultas', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(consulta)
+                });
+                if(res.ok) {
+                    mostrarNotificacao('Consulta agendada!');
+                    formAgendar.reset();
+                } else {
+                    mostrarNotificacao('Erro ao agendar.', 'error');
+                }
+            } catch(err) { console.error(err); }
+        });
+    }
+
+    // --- LISTAR CONSULTAS ---
+    async function loadConsultas() {
+        await fetchPacientes();
+        try {
+            const res = await fetch('/api/consultas');
+            let data = await res.json();
+            data = data.map(c => {
+                const cpfLimpo = String(c.cpf).replace(/\D/g, '');
+                const paciente = pacientesCache.find(p => String(p.cpf).replace(/\D/g, '') === cpfLimpo);
+                return {
+                    ...c,
+                    paciente_nome: paciente ? paciente.nome : "—",
+                    paciente_contato: paciente ? paciente.telefone : "—"
+                };
+            });
+            consultasCache = data;
+            consultasFiltradas = [...data];
+            paginaAtualConsultas = 1;
+            renderConsultas();
+        } catch(err) { console.error(err); }
+    }
+
+    const btnBuscar = document.getElementById('btn-buscar');
+    if(btnBuscar) {
+        btnBuscar.addEventListener('click', (e) => {
+            e.preventDefault();
+            const campo = document.getElementById('busca-campo').value;
+            const texto = document.getElementById('busca-valor').value.toLowerCase();
+            consultasFiltradas = consultasCache.filter(c => {
+                if(!texto) return true;
+                if(campo === 'todos') return JSON.stringify(c).toLowerCase().includes(texto);
+                return String(c[campo]||'').toLowerCase().includes(texto);
+            });
+            paginaAtualConsultas = 1;
+            renderConsultas();
+        });
+    }
+
+    const btnAnt = document.getElementById('btn-ant');
+    const btnProx = document.getElementById('btn-prox');
+    if(btnAnt) btnAnt.addEventListener('click', () => { if(paginaAtualConsultas > 1) { paginaAtualConsultas--; renderConsultas(); } });
+    if(btnProx) btnProx.addEventListener('click', () => { if(paginaAtualConsultas < Math.ceil(consultasFiltradas.length/itensPorPagina)) { paginaAtualConsultas++; renderConsultas(); } });
+
+    function renderConsultas() {
+        const tbody = document.querySelector('#tabelaConsultas tbody');
+        if(!tbody) return;
+        tbody.innerHTML = '';
+        const total = consultasFiltradas.length;
+        const paginas = Math.ceil(total / itensPorPagina);
+        if(paginaAtualConsultas < 1) paginaAtualConsultas = 1;
+        if(paginaAtualConsultas > paginas && paginas > 0) paginaAtualConsultas = paginas;
+        const inicio = (paginaAtualConsultas - 1) * itensPorPagina;
+        const fim = inicio + itensPorPagina;
+        const dados = consultasFiltradas.slice(inicio, fim);
+
+        if(total === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center p-4 text-muted">Nenhum resultado.</td></tr>';
+            const infoPag = document.getElementById('info-paginacao');
+            if(infoPag) infoPag.innerText = 'Mostrando 0 - 0 de 0';
+            if(btnAnt) btnAnt.disabled = true;
+            if(btnProx) btnProx.disabled = true;
+            return;
+        }
+
+        dados.forEach(c => {
+            const tr = document.createElement('tr');
+            let dataFmt = c.datahora;
+            if(c.datahora && c.datahora.includes('T')) {
+                const [d, t] = c.datahora.split('T');
+                dataFmt = `${d.split('-').reverse().join('/')} ${t}`;
             }
+            let badge = 'bg-secondary';
+            if(c.status === 'Agendado') badge = 'bg-primary';
+            if(c.status === 'Concluído') badge = 'bg-success';
+            if(c.status === 'Cancelado') badge = 'bg-danger';
 
-            // Converte para string e minúsculo para comparar
-            const valorString = String(valorOriginal || '').toLowerCase();
-            return valorString.includes(termo);
-          });
-        }
-
-        // Volta para a página 1 e renderiza
-        consultasPage = 1;
-        renderConsultasPage();
-      });
-    }
-
-    // formata datahora para exibição legível (tenta aceitar ISO ou já formatado)
-    function formataDataHoraParaExibir(datahora) {
-      // se vier no formato 'YYYY-MM-DDTHH:mm' ou 'YYYY-MM-DD HH:mm:SS' etc.
-      if (!datahora) return '';
-      // tentar converter ISO-like em local string sem alterar timezone (assumindo backend entrega local)
-      try {
-        // se já contém 'T', criar Date
-        const t = datahora.includes('T') ? datahora : datahora.replace(' ', 'T');
-        const dt = new Date(t);
-        if (!isNaN(dt.getTime())) {
-          // dd/mm/yyyy hh:mm
-          const dd = String(dt.getDate()).padStart(2, '0');
-          const mm = String(dt.getMonth()+1).padStart(2, '0');
-          const yyyy = dt.getFullYear();
-          const hh = String(dt.getHours()).padStart(2, '0');
-          const min = String(dt.getMinutes()).padStart(2, '0');
-          return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
-        }
-      } catch (err) { /* ignore */ }
-      return datahora;
-    }
-
-    // Cadastrar paciente
-    formCadastro.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const paciente = {
-        nome: document.getElementById('paciente-nome').value,
-        cpf: document.getElementById('paciente-cpf').value,
-        nascimento: document.getElementById('paciente-nascimento').value,
-        telefone: document.getElementById('paciente-telefone').value,
-        endereco: document.getElementById('paciente-endereco').value,
-        peso: document.getElementById('paciente-peso').value,
-        altura: document.getElementById('paciente-altura').value
-      };
-      try {
-        const res = await fetch('/api/pacientes', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(paciente)
+            tr.innerHTML = `
+                <td>${c.id}</td>
+                <td>${c.medico_id}</td>
+                <td class="fw-bold">${c.paciente_nome}</td>
+                <td>${c.paciente_contato}</td>
+                <td>${c.cpf}</td>
+                <td>${dataFmt}</td>
+                <td class="text-truncate" style="max-width: 100px;" title="${c.observacoes}">${c.observacoes}</td>
+                <td><span class="badge ${badge}">${c.status}</span></td>
+                <td>
+                    <div class="d-flex gap-1">
+                        <button class="btn btn-sm btn-primary btn-edit-con" data-id="${c.id}">Editar</button>
+                        <button class="btn btn-sm btn-danger btn-del-con" data-id="${c.id}">Excluir</button>
+                    </div>
+                </td>
+            `;
+            tr.querySelector('.btn-edit-con').addEventListener('click', () => abrirEdicaoConsulta(c));
+            tr.querySelector('.btn-del-con').addEventListener('click', () => deletarConsulta(c.id));
+            tbody.appendChild(tr);
         });
-        if (res.ok) {
-          await atualizarTudoImediato();
-          mostrarToast('Paciente cadastrado com sucesso!', 'success');
-          formCadastro.reset();
-        } else {
-          const json = await res.json().catch(()=>({}));
-          mostrarToast(json.message || 'Erro ao cadastrar paciente', 'danger');
-        }
-      } catch (err) {
-        console.error(err);
-        mostrarToast('Erro ao cadastrar paciente', 'danger');
-      }
-    });
 
-    // Agendar consulta com verificação de conflito
-    formAgendar.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const consulta = {
-        cpf: document.getElementById('form-paciente').value,
-        datahora: document.getElementById('form-datahora').value,
-        observacoes: document.getElementById('form-obs').value,
-        medico_id: document.getElementById('form-medico').value,
-        pagamento: document.getElementById('form-pagamento').value
-      };
-
-      // validação básica
-      if (!consulta.cpf || !consulta.datahora || !consulta.medico_id) {
-        mostrarToast('Preencha todos os campos', 'warning');
-        return;
-      }
-
-      // checar conflitos localmente (com cache)
-      const conflito = consultasCache.some(c => {
-        // comparar mesmo medico e mesma data/hora (string compare)
-        return String(c.medico_id) === String(consulta.medico_id) && normalizeDateTime(c.datahora) === normalizeDateTime(consulta.datahora);
-      });
-
-      if (conflito) {
-        mostrarToast('Já existe uma consulta agendada para esse médico nesse horário.', 'warning');
-        return;
-      }
-
-      // enviar
-      try {
-        const res = await fetch('/api/consultas', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(consulta)
-        });
-        if (res.ok) {
-          await atualizarTudoImediato();
-          mostrarToast('Consulta agendada com sucesso!', 'success');
-          formAgendar.reset();
-        } else {
-          const json = await res.json().catch(()=>({}));
-          mostrarToast(json.message || 'Erro ao agendar consulta', 'danger');
-        }
-      } catch (err) {
-        console.error(err);
-        mostrarToast('Erro ao agendar consulta', 'danger');
-      }
-    });
-
-    // normaliza datetime para comparação: tenta reduzir formatos diferentes
-    function normalizeDateTime(d) {
-      if (!d) return '';
-      // se for ISO com T, usar prefix yyyy-mm-ddTHH:MM (sem segundos)
-      try {
-        if (typeof d !== 'string') d = String(d);
-        if (d.includes('T')) {
-          return d.slice(0,16);
-        }
-        // converter "dd/mm/yyyy hh:mm" possivelmente vindo de exibição
-        if (d.includes('/')) {
-          const parts = d.split(' ');
-          const date = parts[0].split('/');
-          const time = (parts[1]||'00:00').slice(0,5);
-          return `${date[2]}-${date[1]}-${date[0]}T${time}`;
-        }
-        // fallback: take first 16 chars
-        return d.slice(0,16);
-      } catch (err) {
-        return d.slice(0,16);
-      }
+        const mostrarAte = Math.min(fim, total);
+        const infoPag = document.getElementById('info-paginacao');
+        if(infoPag) infoPag.innerText = `Mostrando ${inicio + 1} - ${mostrarAte} de ${total}`;
+        if(btnAnt) btnAnt.disabled = (paginaAtualConsultas === 1);
+        if(btnProx) btnProx.disabled = (paginaAtualConsultas === paginas || paginas === 0);
     }
 
-    // Editar e excluir consulta (delegado)
-    tabelaConsultasBody.addEventListener('click', async (e) => {
-      if (e.target.classList.contains('btn-delete')) {
-        const id = e.target.dataset.id;
-        if (!confirm('Confirma exclusão?')) return;
-        try {
-          const res = await fetch(`/api/consultas/${id}`, { method: 'DELETE' });
-          if (res.ok) {
-            await atualizarTudoImediato();
-            mostrarToast('Consulta excluída com sucesso!', 'success');
-          } else {
-            mostrarToast('Erro ao excluir consulta', 'danger');
-          }
-        } catch (err) {
-          console.error(err);
-          mostrarToast('Erro ao excluir consulta', 'danger');
+    // --- LISTAR PACIENTES ---
+    async function loadPacientesLista() {
+        await fetchPacientes();
+        pacientesFiltrados = [...pacientesCache];
+        paginaAtualPacientes = 1;
+        renderPacientes();
+    }
+    
+    const btnBuscarPac = document.getElementById('btn-buscar-paciente');
+    if(btnBuscarPac) {
+        btnBuscarPac.addEventListener('click', (e) => {
+            e.preventDefault();
+            const campo = document.getElementById('busca-paciente-campo').value;
+            const texto = document.getElementById('busca-paciente-valor').value.toLowerCase();
+            pacientesFiltrados = pacientesCache.filter(p => {
+                if(!texto) return true;
+                if(campo === 'todos') return JSON.stringify(p).toLowerCase().includes(texto);
+                return String(p[campo]||'').toLowerCase().includes(texto);
+            });
+            paginaAtualPacientes = 1;
+            renderPacientes();
+        });
+    }
+
+    const btnAntPac = document.getElementById('btn-ant-pac');
+    const btnProxPac = document.getElementById('btn-prox-pac');
+    if(btnAntPac) btnAntPac.addEventListener('click', () => { if(paginaAtualPacientes > 1) { paginaAtualPacientes--; renderPacientes(); } });
+    if(btnProxPac) btnProxPac.addEventListener('click', () => { if(paginaAtualPacientes < Math.ceil(pacientesFiltrados.length/itensPorPagina)) { paginaAtualPacientes++; renderPacientes(); } });
+
+    function renderPacientes() {
+        const tbody = document.querySelector('#tabelaPacientesMain tbody');
+        if(!tbody) return;
+        tbody.innerHTML = '';
+        const total = pacientesFiltrados.length;
+        const paginas = Math.ceil(total / itensPorPagina);
+        if(paginaAtualPacientes < 1) paginaAtualPacientes = 1;
+        if(paginaAtualPacientes > paginas && paginas > 0) paginaAtualPacientes = paginas;
+        const inicio = (paginaAtualPacientes - 1) * itensPorPagina;
+        const fim = inicio + itensPorPagina;
+        const dados = pacientesFiltrados.slice(inicio, fim);
+
+        if(total === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center p-4 text-muted">Nenhum paciente encontrado.</td></tr>';
+            const infoPag = document.getElementById('info-paginacao-pac');
+            if(infoPag) infoPag.innerText = 'Mostrando 0 - 0 de 0';
+            if(btnAntPac) btnAntPac.disabled = true;
+            if(btnProxPac) btnProxPac.disabled = true;
+            return;
         }
-      }
 
-      if (e.target.classList.contains('btn-edit')) {
-        const id = e.target.dataset.id;
-        consultaEditando = id;
-        // buscar a consulta no cache
-        const c = consultasCache.find(x => String(x.id) === String(id));
-        if (!c) return;
+        dados.forEach(p => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${p.id}</td>
+                <td class="fw-bold">${p.nome}</td>
+                <td>${p.cpf}</td>
+                <td>${p.nascimento}</td>
+                <td>${p.peso}</td>
+                <td>${p.altura}</td>
+                <td>
+                    <div class="d-flex gap-1">
+                        <button class="btn btn-sm btn-primary btn-edit-pac" data-cpf="${p.cpf}">Editar</button>
+                        <button class="btn btn-sm btn-danger btn-del-pac" data-cpf="${p.cpf}">Excluir</button>
+                    </div>
+                </td>
+            `;
+            tr.querySelector('.btn-edit-pac').addEventListener('click', () => abrirEdicaoPaciente(p));
+            tr.querySelector('.btn-del-pac').addEventListener('click', () => deletarPaciente(p.cpf));
+            tbody.appendChild(tr);
+        });
 
-        document.getElementById('edit-nome').value = c.paciente_nome || '';
-        document.getElementById('edit-contato').value = c.paciente_contato || '';
+        const mostrarAte = Math.min(fim, total);
+        const infoPag = document.getElementById('info-paginacao-pac');
+        if(infoPag) infoPag.innerText = `Mostrando ${inicio + 1} - ${mostrarAte} de ${total}`;
+        if(btnAntPac) btnAntPac.disabled = (paginaAtualPacientes === 1);
+        if(btnProxPac) btnProxPac.disabled = (paginaAtualPacientes === paginas || paginas === 0);
+    }
+
+    // --- CRUD ---
+    function abrirEdicaoConsulta(c) {
+        if(!modalEditar) return;
+        document.getElementById('edit-id').value = c.id; 
+        document.getElementById('edit-nome').value = c.paciente_nome;
+        document.getElementById('edit-contato').value = c.paciente_contato;
         document.getElementById('edit-cpf').value = c.cpf;
-        // colocar datahora em input adequado (se possível)
-        const editDataInput = document.getElementById('edit-datahora');
-        // preferimos datetime-local; se input for text, tentamos manter formato legível
-        try {
-          // converte para yyyy-mm-ddThh:mm (valor aceito por datetime-local)
-          const normalized = normalizeDateTime(c.datahora);
-          if (editDataInput.type === 'text') {
-            editDataInput.value = c.datahora;
-          } else {
-            editDataInput.value = normalized;
-          }
-        } catch (err) {
-          editDataInput.value = c.datahora;
-        }
+        
+        let dataValue = c.datahora;
+        if(c.datahora && c.datahora.includes(' ')) dataValue = c.datahora.replace(' ', 'T');
+        document.getElementById('edit-datahora').value = dataValue;
         document.getElementById('edit-obs').value = c.observacoes;
-        document.getElementById('edit-status').value = c.status;
         document.getElementById('edit-pagamento').value = c.pagamento || 'Dinheiro';
-
-        const modal = new bootstrap.Modal(document.getElementById('modalEditar'), {
-          backdrop: 'static',
-          keyboard: false
-        });
-        modal.show();
-      }
-    });
-
-    // Salvar edição de consulta com checagem de conflito (se datahora mudou)
-    formEditar.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      if (!consultaEditando) return;
-      const dados = {
-      nome: document.getElementById('edit-nome').value,
-      cpf: document.getElementById('edit-cpf').value,
-      paciente_contato: document.getElementById('edit-contato').value,
-      datahora: document.getElementById('edit-datahora').value,
-      observacoes: document.getElementById('edit-obs').value,
-      status: document.getElementById('edit-status').value,
-      pagamento: document.getElementById('edit-pagamento').value
-      };
-
-      // verificar conflito: se novo horário coincide com outro agendamento do mesmo médico (exceto a própria consulta)
-      const consultaOriginal = consultasCache.find(c => String(c.id) === String(consultaEditando));
-      const medicoId = consultaOriginal ? String(consultaOriginal.medico_id) : null;
-      const novoNormalized = normalizeDateTime(dados.datahora);
-
-      const conflito = consultasCache.some(c => {
-        if (String(c.id) === String(consultaEditando)) return false;
-        return String(c.medico_id) === medicoId && normalizeDateTime(c.datahora) === novoNormalized;
-      });
-
-      if (conflito) {
-        mostrarToast('Conflito: outro agendamento já existe para esse médico neste horário.', 'warning');
-        return;
-      }
-
-      try {
-        const res = await fetch(`/api/consultas/${consultaEditando}`, {
-          method: 'PUT',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(dados)
-        });
-        if (res.ok) {
-          await atualizarTudoImediato();
-          consultaEditando = null;
-          const modal = bootstrap.Modal.getInstance(document.getElementById('modalEditar'));
-          if (modal) modal.hide();
-          mostrarToast('Consulta atualizada com sucesso!', 'info');
-        } else {
-          mostrarToast('Erro ao atualizar consulta', 'danger');
-        }
-      } catch (err) {
-        console.error(err);
-        mostrarToast('Erro ao atualizar consulta', 'danger');
-      }
-    });
-
-    // Atualiza pacientes e consultas imediatamente (usado pós-op)
-    async function atualizarTudoImediato() {
-      await Promise.all([loadPacientes(), loadConsultas(consultasPage)]);
-      montarTabelaPacientes();
+        document.getElementById('edit-status').value = c.status;
+        modalEditar.show();
     }
 
-   
+    if(formEditar) {
+        formEditar.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('edit-id').value; 
+            const payload = {
+                datahora: document.getElementById('edit-datahora').value,
+                observacoes: document.getElementById('edit-obs').value,
+                status: document.getElementById('edit-status').value,
+                pagamento: document.getElementById('edit-pagamento').value
+            };
+            try {
+                const res = await fetch(`/api/consultas/${id}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                if(res.ok) {
+                    mostrarNotificacao('Consulta atualizada!');
+                    modalEditar.hide();
+                    loadConsultas();
+                } else {
+                    mostrarNotificacao('Erro ao atualizar.', 'error');
+                }
+            } catch(err) { console.error(err); }
+        });
+    }
 
-    // converter o input de edit-datahora pra datetime-local se possível (melhora UX)
-    (function ajustarInputEditDataHora() {
-      const input = document.getElementById('edit-datahora');
-      if (input) {
+    async function deletarConsulta(id) {
+        if(!confirm('Excluir esta consulta?')) return;
         try {
-          input.type = 'datetime-local';
-        } catch (err) { /* ignore */ }
-      }
-    })();
+            const res = await fetch(`/api/consultas/${id}`, { method: 'DELETE' });
+            if(res.ok) {
+                mostrarNotificacao('Consulta excluída!');
+                loadConsultas();
+            } else {
+                mostrarNotificacao('Erro.', 'error');
+            }
+        } catch(err) { console.error(err); }
+    }
 
-    // função utilitária: iniciar tudo
-    (async function init() {
-      inserirBotaoVerPacientes();
-      await Promise.all([loadPacientes(), loadConsultas(1)]);
-      montarTabelaPacientes();
-      iniciarPolling();
-    })();
-  }
+    function abrirEdicaoPaciente(p) {
+        if(!modalEditarPaciente) return;
+        document.getElementById('edit-paciente-nome').value = p.nome;
+        document.getElementById('edit-paciente-cpf').value = p.cpf;
+        document.getElementById('edit-paciente-nasc').value = p.nascimento;
+        document.getElementById('edit-paciente-telefone').value = p.telefone;
+        document.getElementById('edit-paciente-endereco').value = p.endereco;
+        document.getElementById('edit-paciente-peso').value = p.peso;
+        document.getElementById('edit-paciente-altura').value = p.altura;
+        
+        formEditarPaciente.dataset.cpfOriginal = p.cpf;
+        modalEditarPaciente.show();
+    }
+
+    if(formEditarPaciente) {
+        formEditarPaciente.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const cpfOriginal = formEditarPaciente.dataset.cpfOriginal;
+            const payload = {
+                nome: document.getElementById('edit-paciente-nome').value,
+                cpf: document.getElementById('edit-paciente-cpf').value,
+                nascimento: document.getElementById('edit-paciente-nasc').value,
+                telefone: document.getElementById('edit-paciente-telefone').value,
+                endereco: document.getElementById('edit-paciente-endereco').value,
+                peso: document.getElementById('edit-paciente-peso').value,
+                altura: document.getElementById('edit-paciente-altura').value
+            };
+            try {
+                const res = await fetch(`/api/pacientes/${cpfOriginal}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                if(res.ok) {
+                    mostrarNotificacao('Paciente atualizado!');
+                    modalEditarPaciente.hide();
+                    loadPacientesLista();
+                } else {
+                    const err = await res.json();
+                    mostrarNotificacao(err.message || 'Erro.', 'error');
+                }
+            } catch(err) { console.error(err); }
+        });
+    }
+
+    async function deletarPaciente(cpf) {
+        if(!confirm('Excluir paciente?')) return;
+        try {
+            const res = await fetch(`/api/pacientes/${cpf}`, { method: 'DELETE' });
+            if(res.ok) {
+                mostrarNotificacao('Paciente excluído.');
+                loadPacientesLista();
+            } else {
+                mostrarNotificacao('Erro.', 'error');
+            }
+        } catch(err) { console.error(err); }
+    }
+
+    if(document.getElementById('formCadastro')) {
+        carregarSelectPacientes();
+    }
 });

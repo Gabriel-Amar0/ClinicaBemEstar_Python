@@ -152,7 +152,6 @@ def api_pacientes():
 @app.route('/api/pacientes/<cpf>', methods=['PUT', 'DELETE'])
 def api_paciente_update(cpf):
     db = read_db()
-    # Converte para string para garantir a comparação correta
     cpf_str = str(cpf)
     
     paciente = next((p for p in db['pacientes'] if str(p['cpf']) == cpf_str), None)
@@ -161,37 +160,22 @@ def api_paciente_update(cpf):
         return jsonify({"message": "Paciente não encontrado"}), 404
 
     if request.method == 'DELETE':
-        # Remove o paciente
         db['pacientes'] = [p for p in db['pacientes'] if str(p['cpf']) != cpf_str]
-        
-        # OPCIONAL: Se quiser apagar também as consultas desse paciente ao excluir:
-        # db['consultas'] = [c for c in db['consultas'] if str(c['cpf']) != cpf_str]
-        
         write_db(db)
         return jsonify({"ok": True})
 
-    # Lógica de ATUALIZAÇÃO (PUT)
     data = request.json
-    
-    # Verifica se o CPF está sendo alterado
     novo_cpf = data.get('cpf')
     
     if novo_cpf and str(novo_cpf) != cpf_str:
-        # 1. Verifica se o novo CPF já existe em OUTRO paciente (evitar duplicidade)
         existente = next((p for p in db['pacientes'] if str(p['cpf']) == str(novo_cpf)), None)
         if existente:
-             return jsonify({"message": "Novo CPF já existente no sistema"}), 400
+            return jsonify({"message": "Novo CPF já existente no sistema"}), 400
         
-        # 2. ATUALIZAÇÃO EM CASCATA: Atualiza o CPF em todas as consultas desse paciente
-        # Isso é o que corrige o seu bug!
-        count_updates = 0
         for consulta in db['consultas']:
             if str(consulta.get('cpf')) == cpf_str:
                 consulta['cpf'] = str(novo_cpf)
-                count_updates += 1
-        print(f"CPF atualizado em {count_updates} consultas.")
 
-    # Atualiza os dados do paciente
     for campo in ['nome', 'cpf', 'nascimento', 'telefone', 'endereco', 'peso', 'altura']:
         if campo in data and data[campo] is not None:
             paciente[campo] = data[campo]
@@ -201,25 +185,59 @@ def api_paciente_update(cpf):
 
 
 # ========================
-# CONSULTAS
+# CONSULTAS (CORRIGIDO)
 # ========================
 @app.route('/api/consultas', methods=['GET', 'POST'])
 def api_consultas():
     db = read_db()
-    if request.method == 'GET':
-        consultas_exp = []
-        for c in db['consultas']:
-            paciente = next((p for p in db['pacientes'] if p['cpf'] == c['cpf']), {})
-            medico = next((m for m in db['medicos'] if m['id'] == c['medico_id']), {})
-            consultas_exp.append({
-                **c,
-                "paciente_nome": paciente.get('nome'),
-                "paciente_contato": paciente.get('telefone'),
-                "medico_nome": medico.get('nome')
-            })
-        return jsonify(consultas_exp)
 
+    # ========================
+    # GET → Listar consultas
+    # ========================
+    if request.method == 'GET':
+
+        user = session.get('user')
+        role = user.get('role') if user else None
+        medico_id_logado = user.get('id') if role == 'Medico' else None
+
+        consultas_expandidas = []
+
+        for c in db['consultas']:
+
+            # ================================
+            # REGRAS CORRETAS
+            # ================================
+
+            if role == 'Atendente':
+                permitido = True
+
+            elif role == 'Medico' and medico_id_logado == 1:
+                permitido = True
+
+            elif role == 'Medico':
+                permitido = (c['medico_id'] == medico_id_logado)
+
+            else:
+                permitido = False
+
+            if permitido:
+                paciente = next((p for p in db['pacientes'] if p['cpf'] == c['cpf']), {})
+                medico = next((m for m in db['medicos'] if m['id'] == c['medico_id']), {})
+
+                consultas_expandidas.append({
+                    **c,
+                    "paciente_nome": paciente.get('nome'),
+                    "paciente_contato": paciente.get('telefone'),
+                    "medico_nome": medico.get('nome')
+                })
+
+        return jsonify(consultas_expandidas)
+
+    # ========================
+    # POST → Criar consulta
+    # ========================
     data = request.json
+
     consulta = {
         "id": db['next_ids']['consulta'],
         "medico_id": int(data.get('medico_id')),
@@ -229,6 +247,7 @@ def api_consultas():
         "pagamento": data.get('pagamento'),
         "status": data.get('status', 'Agendado')
     }
+
     db['consultas'].append(consulta)
     db['next_ids']['consulta'] += 1
     write_db(db)
@@ -247,13 +266,13 @@ def api_consulta_update(cid):
         write_db(db)
         return jsonify({"ok": True})
 
-    # Atualização (PUT)
     data = request.json
    
     consulta['datahora'] = data.get('datahora', consulta['datahora'])
     consulta['observacoes'] = data.get('observacoes', consulta['observacoes'])
     consulta['status'] = data.get('status', consulta['status'])
     consulta['pagamento'] = data.get('pagamento', consulta.get('pagamento'))
+
     write_db(db)
     return jsonify(consulta)
 
