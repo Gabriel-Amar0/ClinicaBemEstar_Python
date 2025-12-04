@@ -233,16 +233,33 @@ def api_consultas():
 
         return jsonify(consultas_expandidas)
 
-    # ========================
+# ========================
     # POST → Criar consulta
     # ========================
     data = request.json
+    
+    novo_medico_id = int(data.get('medico_id'))
+    novo_horario = data.get('datahora') # Isso traz Dia + Hora (ex: "2023-10-27T09:00")
+
+    # --- TRAVA DE SEGURANÇA ---
+    for c in db['consultas']:
+        # Verifica se é o mesmo médico
+        mesmo_medico = (c['medico_id'] == novo_medico_id)
+        
+        # Verifica se é EXATAMENTE o mesmo dia E hora
+        # Se for no mesmo dia mas hora diferente, isso aqui dará Falso e permite agendar.
+        mesmo_horario = (c['datahora'] == novo_horario)
+
+        if mesmo_medico and mesmo_horario:
+            # Só entra aqui se for o mesmo médico NO MESMO horário exato.
+            return jsonify({"message": "Horário indisponível: Médico já ocupado neste horário."}), 409
+    # --------------------------
 
     consulta = {
         "id": db['next_ids']['consulta'],
-        "medico_id": int(data.get('medico_id')),
+        "medico_id": novo_medico_id,
         "cpf": data.get('cpf'),
-        "datahora": data.get('datahora'),
+        "datahora": novo_horario,
         "observacoes": data.get('observacoes'),
         "pagamento": data.get('pagamento'),
         "status": data.get('status', 'Agendado')
