@@ -116,10 +116,19 @@
       "observacoes": "Reavaliação de dor no joelho direito. Paciente finalizou as sessões de fisioterapia indicadas na última consulta e relata melhora parcial.",
       "pagamento": "Dinheiro",
       "status": "Agendado"
+    },
+    {
+      "id": 32,
+      "medico_id": 3,
+      "cpf": "000.000.000-04",
+      "datahora": "2025-12-18T09:59",
+      "observacoes": "Retorno, paciente ainda queixa-se de dor de garganta forte",
+      "pagamento": "Cartão de Débito",
+      "status": "Agendado"
     }
   ],
   "next_ids": {
     "paciente": 23,
-    "consulta": 32
+    "consulta": 33
   }
 }
