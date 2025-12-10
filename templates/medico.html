@@ -39,15 +39,14 @@
           <div class="col-md-3">
               <select id="filtro-campo" class="form-select border-secondary-subtle">
                   <option value="todos">Todos os campos</option>
-                  <option value="id">ID da Consulta</option>
-                  <option value="medico_id">ID do Médico</option>
+                  <option value="datahora">Data</option>
                   <option value="paciente_nome">Nome do Paciente</option>
                   <option value="cpf">CPF</option>
-                  <option value="status">Status</option>
+                  <option value="id">ID da Consulta</option>
               </select>
           </div>
           <div class="col-md-7">
-              <input type="text" id="filtro-texto" class="form-control border-secondary-subtle" placeholder="Digite o que procura...">
+              <input type="text" id="filtro-texto" class="form-control border-secondary-subtle" placeholder="Digite para buscar...">
           </div>
           <div class="col-md-2">
               <button id="btn-buscar" class="btn btn-primary w-100">
@@ -78,12 +77,10 @@
 
       <div class="d-flex justify-content-between align-items-center mt-3">
         <span id="info-paginacao" class="text-dark fw-bold small">Mostrando 0 - 0 de 0</span>
-        
         <div class="d-flex gap-2">
             <button id="btn-ant" class="btn btn-light text-primary border shadow-sm px-4 fw-bold" disabled>
                 <i class="bi bi-chevron-left"></i> Anterior
             </button>
-            
             <button id="btn-prox" class="btn btn-primary shadow-sm px-4 fw-bold">
                 Próxima <i class="bi bi-chevron-right"></i>
             </button>
@@ -93,7 +90,6 @@
     </section>
 
     <section id="pacientes" class="conteudo-secao escondido">
-
       <h3 class="mb-4 text-primary fw-bold">Pacientes Cadastrados</h3>
 
       <div class="row g-2 align-items-center mb-3">
@@ -134,20 +130,16 @@
 
       <div class="d-flex justify-content-between align-items-center mt-3">
         <span id="info-paginacao-pac" class="text-dark fw-bold small">Mostrando 0 - 0 de 0</span>
-        
         <div class="d-flex gap-2">
             <button id="btn-ant-pac" class="btn btn-light text-primary border shadow-sm px-4 fw-bold" disabled>
                 <i class="bi bi-chevron-left"></i> Anterior
             </button>
-            
             <button id="btn-prox-pac" class="btn btn-primary shadow-sm px-4 fw-bold">
                 Próxima <i class="bi bi-chevron-right"></i>
             </button>
         </div>
       </div>
-
     </section>
-
   </main>
 
   <div class="modal fade" id="modalEditarConsulta" tabindex="-1" aria-hidden="true">
@@ -198,7 +190,7 @@
     </div>
   </div>
 
-  <div class="toast-container position-fixed bottom-0 end-0 p-3">
+  <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1060;">
     <div id="toastAviso" class="toast align-items-center text-white border-0" role="alert" aria-live="assertive" aria-atomic="true">
       <div class="d-flex">
         <div class="toast-body">
@@ -211,6 +203,5 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="{{ url_for('static', filename='js/medico.js') }}"></script>
-
 </body>
 </html>
