@@ -335,6 +335,29 @@
     </div>
   </div>
 
+  <div class="modal fade" id="modalExclusao" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content border-0 shadow">
+        <div class="modal-header bg-danger text-white border-0">
+          <h5 class="modal-title fw-bold">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>Confirmar Exclusão
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body text-center p-4">
+          <p class="mb-0 fs-5 text-secondary">Tem certeza que deseja excluir esta consulta?</p>
+          <p class="text-muted small mt-2">Essa ação não poderá ser desfeita.</p>
+        </div>
+        <div class="modal-footer border-0 justify-content-center pb-4">
+          <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-danger px-4 fw-bold" id="btnConfirmarExclusao">
+            Sim, Excluir
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1060;">
     <div id="toastAviso" class="toast align-items-center text-white border-0" role="alert" aria-live="assertive" aria-atomic="true">
       <div class="d-flex">
