@@ -19,10 +19,6 @@
       "senha": "123"
     }
   ],
-  "pacientes": [],
-  "consultas": [],
-  "next_ids": {
-    "paciente": 25,
-    "consulta": 38
+
   }
 }
