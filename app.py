@@ -4,15 +4,15 @@ import json
 from datetime import datetime
 from functools import wraps
 
+# Configuração da aplicação Flask e diretórios de recursos estáticos
 app = Flask(__name__, static_folder='static', template_folder='templates')
 app.secret_key = 'troque-esta-chave-por-uma-segura'
 
+# Caminho absoluto para o arquivo JSON que atua como banco de dados
 DB_PATH = os.path.join(os.path.dirname(__file__), 'data', 'db.json')
 
 
-# ========================
-# BANCO DE DADOS LOCAL (JSON)
-# ========================
+# Funções auxiliares para inicialização, leitura e escrita no banco de dados
 def init_db():
     if not os.path.exists(os.path.dirname(DB_PATH)):
         os.makedirs(os.path.dirname(DB_PATH))
@@ -37,9 +37,7 @@ def write_db(data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-# ========================
-# AUTENTICAÇÃO
-# ========================
+# Decorador para verificar autenticação e permissões de acesso às rotas
 def login_required(role=None):
     def decorator(f):
         @wraps(f)
@@ -53,16 +51,19 @@ def login_required(role=None):
     return decorator
 
 
+# Redireciona a raiz do site para a tela de login
 @app.route('/')
 def root():
     return redirect(url_for('login'))
 
 
+# Renderiza a página de login
 @app.route('/login', methods=['GET'])
 def login():
     return render_template('login.html')
 
 
+# Processa as credenciais de login e cria a sessão do usuário
 @app.route('/api/login', methods=['POST'])
 def api_login():
     data = request.json
@@ -83,42 +84,38 @@ def api_login():
             session['user'] = {"role": "Atendente", "nome": "Atendente"}
             return jsonify({"ok": True, "redirect": url_for('atendente')})
 
-    return jsonify({"ok": False, "message": "Credenciais incorretas"}), 400
+    return jsonify({"ok": False, "message": "Credenciais Incorretas"}), 400
 
 
+# Limpa a sessão atual e redireciona para a página de login
 @app.route('/logout')
 def logout():
     session.clear()
     return redirect(url_for('login'))
 
 
-# ========================
-# PÁGINAS
-# ========================
+# Renderiza a página principal do painel do Médico
 @app.route('/medico')
 @login_required(role='Medico')
 def medico():
     return render_template('medico.html', user=session['user'])
 
 
+# Renderiza a página principal do painel do Atendente
 @app.route('/atendente')
 @login_required(role='Atendente')
 def atendente():
     return render_template('atendente.html', user=session['user'])
 
 
-# ========================
-# MÉDICOS
-# ========================
+# Endpoint para listar todos os médicos disponíveis
 @app.route('/api/medicos', methods=['GET'])
 def api_medicos():
     db = read_db()
     return jsonify(db['medicos'])
 
 
-# ========================
-# PACIENTES
-# ========================
+# Endpoint para listar ou cadastrar pacientes (valida duplicidade de CPF)
 @app.route('/api/pacientes', methods=['GET', 'POST'])
 def api_pacientes():
     db = read_db()
@@ -129,7 +126,6 @@ def api_pacientes():
     data = request.json
     cpf_limpo = data.get('cpf', '').replace('.', '').replace('-', '')
 
-    # Impedir duplicação de CPF
     if any(p['cpf'] == cpf_limpo for p in db['pacientes']):
         return jsonify({"message": "CPF já cadastrado"}), 400
 
@@ -149,6 +145,7 @@ def api_pacientes():
     return jsonify(paciente), 201
 
 
+# Endpoint para editar ou excluir dados de um paciente específico
 @app.route('/api/pacientes/<cpf>', methods=['PUT', 'DELETE'])
 def api_paciente_update(cpf):
     db = read_db()
@@ -184,16 +181,12 @@ def api_paciente_update(cpf):
     return jsonify(paciente)
 
 
-# ========================
-# CONSULTAS (CORRIGIDO)
-# ========================
+# Endpoint principal para gerenciar consultas (Listagem com filtros de permissão e Agendamento)
 @app.route('/api/consultas', methods=['GET', 'POST'])
 def api_consultas():
     db = read_db()
 
-    # ========================
-    # GET → Listar consultas
-    # ========================
+    # GET: Retorna lista de consultas filtrada pelo nível de acesso do usuário
     if request.method == 'GET':
 
         user = session.get('user')
@@ -204,19 +197,10 @@ def api_consultas():
 
         for c in db['consultas']:
 
-            # ================================
-            # REGRAS CORRETAS
-            # ================================
-
             if role == 'Atendente':
                 permitido = True
-
-            elif role == 'Medico' and medico_id_logado == 1:
-                permitido = True
-
             elif role == 'Medico':
                 permitido = (c['medico_id'] == medico_id_logado)
-
             else:
                 permitido = False
 
@@ -233,27 +217,18 @@ def api_consultas():
 
         return jsonify(consultas_expandidas)
 
-# ========================
-    # POST → Criar consulta
-    # ========================
+    # POST: Cria nova consulta verificando conflito de horário
     data = request.json
     
     novo_medico_id = int(data.get('medico_id'))
-    novo_horario = data.get('datahora') # Isso traz Dia + Hora (ex: "2023-10-27T09:00")
+    novo_horario = data.get('datahora') 
 
-    # --- TRAVA DE SEGURANÇA ---
     for c in db['consultas']:
-        # Verifica se é o mesmo médico
         mesmo_medico = (c['medico_id'] == novo_medico_id)
-        
-        # Verifica se é EXATAMENTE o mesmo dia E hora
-        # Se for no mesmo dia mas hora diferente, isso aqui dará Falso e permite agendar.
         mesmo_horario = (c['datahora'] == novo_horario)
 
         if mesmo_medico and mesmo_horario:
-            # Só entra aqui se for o mesmo médico NO MESMO horário exato.
             return jsonify({"message": "Horário indisponível: Médico já ocupado neste horário."}), 409
-    # --------------------------
 
     consulta = {
         "id": db['next_ids']['consulta'],
@@ -271,6 +246,7 @@ def api_consultas():
     return jsonify(consulta), 201
 
 
+# Endpoint para modificar status/dados ou cancelar uma consulta
 @app.route('/api/consultas/<int:cid>', methods=['PUT', 'DELETE'])
 def api_consulta_update(cid):
     db = read_db()
@@ -294,9 +270,7 @@ def api_consulta_update(cid):
     return jsonify(consulta)
 
 
-# ========================
-# EXECUÇÃO 
-# ========================
+# Inicializa o banco e executa a aplicação em modo de depuração
 if __name__ == '__main__':
     init_db()
     app.run(debug=True)

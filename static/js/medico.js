@@ -1,48 +1,66 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // VARIÁVEIS GERAIS
+
+    // Converte datas ISO para o formato brasileiro (DD/MM/AAAA)
+    function formatarDataBR(isoString) {
+        if (!isoString) return "—";
+        if (isoString.includes('T')) {
+            const [data, hora] = isoString.split('T');
+            const [ano, mes, dia] = data.split('-');
+            return `${dia}/${mes}/${ano} às ${hora}`;
+        }
+        const [ano, mes, dia] = isoString.split('-');
+        return `${dia}/${mes}/${ano}`;
+    }
+
+    // Gerencia a exibição de notificações do sistema (Toasts)
+    const toastEl = document.getElementById('toastAviso');
+    const toastInstance = new bootstrap.Toast(toastEl);
+    const toastMsg = document.getElementById('toast-msg');
+
+    function mostrarNotificacao(mensagem, tipo = 'success') {
+        toastMsg.innerText = mensagem;
+        toastEl.classList.remove('bg-success', 'bg-danger', 'bg-warning');
+        if (tipo === 'success') toastEl.classList.add('bg-success');
+        if (tipo === 'error') toastEl.classList.add('bg-danger');
+        if (tipo === 'warning') toastEl.classList.add('bg-warning');
+        toastInstance.show();
+    }
+
+    // Referências aos elementos do DOM e Modais
     const abas = document.querySelectorAll('.nav-link');
     const secoes = document.querySelectorAll('.conteudo-secao');
     const tabelaConsultas = document.querySelector('#tabelaConsultasMedico tbody');
     const tabelaPacientes = document.querySelector('#tabelaPacientesMedico tbody');
     const modalEditar = new bootstrap.Modal(document.getElementById('modalEditarConsulta'));
     const formEditar = document.getElementById('formEditarConsulta');
-    const toastEl = document.getElementById('toastAviso');
-    const toastInstance = new bootstrap.Toast(toastEl);
-    const toastMsg = document.getElementById('toast-msg');
+    
+    // Configuração do modal de exclusão
+    const modalExclusaoEl = document.getElementById('modalExclusao');
+    const modalExclusao = modalExclusaoEl ? new bootstrap.Modal(modalExclusaoEl) : null;
+    const btnConfirmarExclusao = document.getElementById('btnConfirmarExclusao');
+    let idParaExcluir = null;
 
-    let consultasCache = [];    
-    let pacientesCache = [];
-    const itensPorPagina = 5; 
-    let consultasFiltradas = []; 
-    let paginaAtual = 1;
-    let pacientesFiltrados = [];
-    let paginaAtualPacientes = 1;
+    // Estado da aplicação (Cache e Paginação)
+    let consultasCache = [], pacientesCache = [];
+    let consultasFiltradas = [], pacientesFiltrados = [];
+    let paginaAtual = 1, paginaAtualPacientes = 1;
+    const itensPorPagina = 5;
 
-    // NOTIFICAÇÕES
-    function mostrarNotificacao(mensagem, tipo = 'success') {
-        toastMsg.innerText = mensagem;
-        toastEl.classList.remove('bg-success', 'bg-danger', 'bg-warning');
-        if(tipo === 'success') toastEl.classList.add('bg-success');
-        if(tipo === 'error') toastEl.classList.add('bg-danger');
-        toastInstance.show();
-    }
-
-    // NAVEGAÇÃO
+    // Controle de navegação entre abas
     abas.forEach(tab => {
         tab.addEventListener('click', (e) => {
             e.preventDefault();
             abas.forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
             secoes.forEach(sec => sec.classList.add('escondido'));
-            const alvo = document.getElementById(tab.getAttribute('data-aba'));
-            if(alvo) alvo.classList.remove('escondido');
+            document.getElementById(tab.getAttribute('data-aba')).classList.remove('escondido');
 
             if (tab.getAttribute('data-aba') === 'consultas-agendadas') loadConsultas();
             if (tab.getAttribute('data-aba') === 'pacientes') loadPacientes();
         });
     });
 
-    // LOADERS
+    // Busca dados de pacientes para cache
     async function preloadPacientes() {
         try {
             const res = await fetch('/api/pacientes');
@@ -51,6 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) { console.error(err); return []; }
     }
 
+    // Carrega e renderiza a lista de pacientes
     async function loadPacientes() {
         await preloadPacientes();
         pacientesFiltrados = [...pacientesCache];
@@ -58,29 +77,24 @@ document.addEventListener('DOMContentLoaded', () => {
         atualizarVisualizacaoPacientes();
     }
 
+    // Carrega consultas e cruza com dados de pacientes
     async function loadConsultas() {
         try {
             await preloadPacientes(); 
             const res = await fetch('/api/consultas');
             let data = await res.json();
             data = data.map(c => {
-                const cpfLimpo = String(c.cpf).replace(/\D/g, '');
-                const paciente = pacientesCache.find(p => String(p.cpf).replace(/\D/g, '') === cpfLimpo);
-                return {
-                    ...c,
-                    paciente_nome: paciente ? paciente.nome : "—",
-                    paciente_contato: paciente ? paciente.telefone : "—"
-                };
+                const paciente = pacientesCache.find(p => String(p.cpf).replace(/\D/g, '') === String(c.cpf).replace(/\D/g, ''));
+                return { ...c, paciente_nome: paciente ? paciente.nome : "—", paciente_contato: paciente ? paciente.telefone : "—" };
             });
             consultasCache = data;
-            // Oculta Concluído e Cancelado inicialmente
             consultasFiltradas = data.filter(c => c.status !== 'Concluído' && c.status !== 'Cancelado');
             paginaAtual = 1;
             atualizarVisualizacao();
         } catch (err) { console.error(err); }
     }
 
-    // --- FILTROS INTELIGENTES (MÉDICO) ---
+    // Filtros da tabela de consultas
     const btnBuscar = document.getElementById('btn-buscar');
     const inputFiltro = document.getElementById('filtro-texto');
     const selectFiltro = document.getElementById('filtro-campo');
@@ -92,33 +106,18 @@ document.addEventListener('DOMContentLoaded', () => {
         consultasFiltradas = consultasCache.filter(c => {
             if (c.status === 'Concluído' || c.status === 'Cancelado') return false; 
             if (!texto) return true;
-
-            // Lógica de Data (Ignora barras e traços)
             if ((campo === 'datahora' || campo === 'todos') && c.datahora) {
-                const [datePart] = c.datahora.split('T'); // "2025-10-25"
-                if(datePart) {
-                    const [ano, mes, dia] = datePart.split('-');
-                    const dataBR = `${dia}${mes}${ano}`; // "25102025"
-                    const textoLimpo = texto.replace(/\D/g, ''); // "20"
-                    
-                    if (dataBR.includes(textoLimpo) && textoLimpo.length > 0) return true;
-                }
+                const [datePart] = c.datahora.split('T'); 
+                const dataBR = datePart ? `${datePart.split('-')[2]}${datePart.split('-')[1]}${datePart.split('-')[0]}` : '';
+                if (dataBR.includes(texto.replace(/\D/g, ''))) return true;
             }
-
-            // Busca Textual
             if (campo === 'todos') {
-                return String(c.id).includes(texto) ||
-                       String(c.medico_id).includes(texto) ||
-                       (c.paciente_nome && c.paciente_nome.toLowerCase().includes(texto)) ||
+                return String(c.id).includes(texto) || String(c.medico_id).includes(texto) || 
+                       (c.paciente_nome && c.paciente_nome.toLowerCase().includes(texto)) || 
                        (c.cpf && String(c.cpf).includes(texto));
             }
-
-            if (campo !== 'datahora') {
-                return String(c[campo] || '').toLowerCase().includes(texto);
-            }
-            return false;
+            return String(c[campo] || '').toLowerCase().includes(texto);
         });
-        
         paginaAtual = 1;
         atualizarVisualizacao();
     }
@@ -126,7 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if(btnBuscar) btnBuscar.addEventListener('click', aplicarFiltro);
     if(inputFiltro) inputFiltro.addEventListener('keyup', (e) => { if(e.key==='Enter') aplicarFiltro(); });
 
-    // Filtros Pacientes
+    // Filtros da tabela de pacientes
     const btnBuscarPac = document.getElementById('btn-buscar-pac');
     const inputFiltroPac = document.getElementById('filtro-texto-pac');
     const selectFiltroPac = document.getElementById('filtro-campo-pac');
@@ -136,11 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const texto = inputFiltroPac.value.toLowerCase();
         pacientesFiltrados = pacientesCache.filter(p => {
             if (!texto) return true;
-            if (campo === 'todos') {
-                return String(p.id).includes(texto) ||
-                       (p.nome && p.nome.toLowerCase().includes(texto)) ||
-                       (p.cpf && String(p.cpf).includes(texto));
-            }
+            if (campo === 'todos') return String(p.id).includes(texto) || p.nome.toLowerCase().includes(texto) || String(p.cpf).includes(texto);
             return String(p[campo] || '').toLowerCase().includes(texto);
         });
         paginaAtualPacientes = 1;
@@ -149,41 +144,32 @@ document.addEventListener('DOMContentLoaded', () => {
     if(btnBuscarPac) btnBuscarPac.addEventListener('click', aplicarFiltroPacientes);
     if(inputFiltroPac) inputFiltroPac.addEventListener('keyup', (e) => { if(e.key==='Enter') aplicarFiltroPacientes(); });
 
-    // RENDERIZAÇÃO CONSULTAS
-    const btnAnt = document.getElementById('btn-ant');
-    const btnProx = document.getElementById('btn-prox');
-    if(btnAnt) btnAnt.addEventListener('click', () => { if (paginaAtual > 1) { paginaAtual--; atualizarVisualizacao(); }});
-    if(btnProx) btnProx.addEventListener('click', () => { if (paginaAtual < Math.ceil(consultasFiltradas.length/itensPorPagina)) { paginaAtual++; atualizarVisualizacao(); }});
+    // Paginação das tabelas
+    document.getElementById('btn-ant')?.addEventListener('click', () => { if (paginaAtual > 1) { paginaAtual--; atualizarVisualizacao(); }});
+    document.getElementById('btn-prox')?.addEventListener('click', () => { if (paginaAtual < Math.ceil(consultasFiltradas.length/itensPorPagina)) { paginaAtual++; atualizarVisualizacao(); }});
+    
+    document.getElementById('btn-ant-pac')?.addEventListener('click', () => { if (paginaAtualPacientes > 1) { paginaAtualPacientes--; atualizarVisualizacaoPacientes(); }});
+    document.getElementById('btn-prox-pac')?.addEventListener('click', () => { if (paginaAtualPacientes < Math.ceil(pacientesFiltrados.length/itensPorPagina)) { paginaAtualPacientes++; atualizarVisualizacaoPacientes(); }});
 
+    // Renderiza a tabela de consultas
     function atualizarVisualizacao() {
         if(!tabelaConsultas) return;
         tabelaConsultas.innerHTML = '';
         const total = consultasFiltradas.length;
         const totalPaginas = Math.ceil(total / itensPorPagina);
-        if (paginaAtual < 1) paginaAtual = 1;
         if (paginaAtual > totalPaginas && totalPaginas > 0) paginaAtual = totalPaginas;
-        const inicio = (paginaAtual - 1) * itensPorPagina;
-        const fim = inicio + itensPorPagina;
-        const dados = consultasFiltradas.slice(inicio, fim);
+        
+        const dados = consultasFiltradas.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina);
 
         if (total === 0) {
             tabelaConsultas.innerHTML = '<tr><td colspan="9" class="text-center p-4 text-muted">Nenhuma consulta encontrada.</td></tr>';
             document.getElementById('info-paginacao').innerText = 'Mostrando 0 - 0 de 0';
-            if(btnAnt) btnAnt.disabled = true;
-            if(btnProx) btnProx.disabled = true;
             return;
         }
 
         dados.forEach(c => {
             const tr = document.createElement('tr');
-            let dataFmt = c.datahora;
-            if(c.datahora && c.datahora.includes('T')) {
-                const [d, t] = c.datahora.split('T');
-                dataFmt = `${d.split('-').reverse().join('/')} ${t}`;
-            }
-            let badge = c.status === 'Agendado' ? 'bg-primary' : 'bg-secondary';
-            if(c.status === 'Concluído') badge = 'bg-success';
-            if(c.status === 'Cancelado') badge = 'bg-danger';
+            let badge = c.status === 'Agendado' ? 'bg-primary' : (c.status === 'Concluído' ? 'bg-success' : 'bg-danger');
             
             tr.innerHTML = `
                 <td>${c.id}</td>
@@ -191,7 +177,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td class="fw-bold text-dark">${c.paciente_nome}</td>
                 <td>${c.paciente_contato}</td>
                 <td>${c.cpf}</td>
-                <td>${dataFmt}</td>
+                <td>${formatarDataBR(c.datahora)}</td>
                 <td class="text-truncate" style="max-width: 150px;" title="${c.observacoes}">${c.observacoes||'-'}</td>
                 <td><span class="badge ${badge}">${c.status}</span></td>
                 <td>
@@ -199,66 +185,57 @@ document.addEventListener('DOMContentLoaded', () => {
                         <button class="btn btn-primary btn-sm btn-editar" data-id="${c.id}">Editar</button>
                         <button class="btn btn-danger btn-sm btn-excluir" data-id="${c.id}">Excluir</button>
                     </div>
-                </td>
-            `;
+                </td>`;
+            
             tr.querySelector('.btn-editar').addEventListener('click', () => abrirModalEdicao(c));
-            tr.querySelector('.btn-excluir').addEventListener('click', () => {
-                if(confirm(`Excluir consulta ${c.id}?`)) deletarConsulta(c.id);
-            });
+            tr.querySelector('.btn-excluir').addEventListener('click', () => confirmarExclusaoConsulta(c.id));
             tabelaConsultas.appendChild(tr);
         });
-        const mostrarAte = Math.min(fim, total);
-        document.getElementById('info-paginacao').innerText = `Mostrando ${inicio + 1} - ${mostrarAte} de ${total}`;
-        if(btnAnt) btnAnt.disabled = (paginaAtual === 1);
-        if(btnProx) btnProx.disabled = (paginaAtual === totalPaginas || totalPaginas === 0);
+        
+        document.getElementById('info-paginacao').innerText = `Mostrando ${dados.length > 0 ? (paginaAtual - 1) * itensPorPagina + 1 : 0} - ${Math.min(paginaAtual * itensPorPagina, total)} de ${total}`;
+        if(document.getElementById('btn-ant')) document.getElementById('btn-ant').disabled = paginaAtual === 1;
+        if(document.getElementById('btn-prox')) document.getElementById('btn-prox').disabled = paginaAtual === totalPaginas || totalPaginas === 0;
     }
 
-    // RENDERIZAÇÃO PACIENTES
-    const btnAntPac = document.getElementById('btn-ant-pac');
-    const btnProxPac = document.getElementById('btn-prox-pac');
-    if(btnAntPac) btnAntPac.addEventListener('click', () => { if (paginaAtualPacientes > 1) { paginaAtualPacientes--; atualizarVisualizacaoPacientes(); }});
-    if(btnProxPac) btnProxPac.addEventListener('click', () => { if (paginaAtualPacientes < Math.ceil(pacientesFiltrados.length/itensPorPagina)) { paginaAtualPacientes++; atualizarVisualizacaoPacientes(); }});
-
+    // Renderiza a tabela de pacientes
     function atualizarVisualizacaoPacientes() {
         if(!tabelaPacientes) return;
         tabelaPacientes.innerHTML = '';
         const total = pacientesFiltrados.length;
         const totalPaginas = Math.ceil(total / itensPorPagina);
-        if (paginaAtualPacientes < 1) paginaAtualPacientes = 1;
         if (paginaAtualPacientes > totalPaginas && totalPaginas > 0) paginaAtualPacientes = totalPaginas;
-        const inicio = (paginaAtualPacientes - 1) * itensPorPagina;
-        const fim = inicio + itensPorPagina;
-        const dados = pacientesFiltrados.slice(inicio, fim);
+
+        const dados = pacientesFiltrados.slice((paginaAtualPacientes - 1) * itensPorPagina, paginaAtualPacientes * itensPorPagina);
 
         if (total === 0) {
             tabelaPacientes.innerHTML = '<tr><td colspan="6" class="text-center p-4 text-muted">Nenhum paciente.</td></tr>';
             document.getElementById('info-paginacao-pac').innerText = 'Mostrando 0 - 0 de 0';
-            if(btnAntPac) btnAntPac.disabled = true;
-            if(btnProxPac) btnProxPac.disabled = true;
             return;
         }
         dados.forEach(p => {
             const tr = document.createElement('tr');
-            tr.innerHTML = `<td>${p.id}</td><td class="fw-bold">${p.nome}</td><td>${p.cpf}</td><td>${p.nascimento||"-"}</td><td>${p.peso||"-"}</td><td>${p.altura||"-"}</td>`;
+            tr.innerHTML = `<td>${p.id}</td><td class="fw-bold">${p.nome}</td><td>${p.cpf}</td><td>${formatarDataBR(p.nascimento)}</td><td>${p.peso||"-"}</td><td>${p.altura||"-"}</td>`;
             tabelaPacientes.appendChild(tr);
         });
-        const itemFinal = Math.min(fim, total);
-        document.getElementById('info-paginacao-pac').innerText = `Mostrando ${inicio + 1} - ${itemFinal} de ${total}`;
-        if(btnAntPac) btnAntPac.disabled = (paginaAtualPacientes === 1);
-        if(btnProxPac) btnProxPac.disabled = (paginaAtualPacientes === totalPaginas || totalPaginas === 0);
+        
+        document.getElementById('info-paginacao-pac').innerText = `Mostrando ${(paginaAtualPacientes - 1) * itensPorPagina + 1} - ${Math.min(paginaAtualPacientes * itensPorPagina, total)} de ${total}`;
+        if(document.getElementById('btn-ant-pac')) document.getElementById('btn-ant-pac').disabled = paginaAtualPacientes === 1;
+        if(document.getElementById('btn-prox-pac')) document.getElementById('btn-prox-pac').disabled = paginaAtualPacientes === totalPaginas || totalPaginas === 0;
     }
 
-    // CRUD
+    // Preenche e abre o modal de edição
     function abrirModalEdicao(c) {
         document.getElementById('edit-id').value = c.id;
         document.getElementById('edit-nome').value = c.paciente_nome;
         document.getElementById('edit-cpf').value = c.cpf;
         document.getElementById('edit-contato').value = c.paciente_contato;
-        document.getElementById('edit-datahora').value = c.datahora;
+        document.getElementById('edit-datahora').value = c.datahora && c.datahora.includes(' ') ? c.datahora.replace(' ', 'T') : c.datahora;
         document.getElementById('edit-obs').value = c.observacoes;
         document.getElementById('edit-status').value = c.status;
         modalEditar.show();
     }
+
+    // Submete a edição da consulta
     if(formEditar) {
         formEditar.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -274,17 +251,31 @@ document.addEventListener('DOMContentLoaded', () => {
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(payload)
                 });
-                if(res.ok) { modalEditar.hide(); mostrarNotificacao('Atualizado!'); loadConsultas(); } 
-                else { mostrarNotificacao('Erro!', 'error'); }
+                if(res.ok) { modalEditar.hide(); mostrarNotificacao('Atualizado com sucesso!'); loadConsultas(); } 
+                else { mostrarNotificacao('Erro ao atualizar!', 'error'); }
             } catch(err) { console.error(err); }
         });
     }
-    async function deletarConsulta(id) {
-        try {
-            const res = await fetch(`/api/consultas/${id}`, { method: 'DELETE' });
-            if(res.ok) { mostrarNotificacao('Excluído!'); loadConsultas(); } 
-            else { mostrarNotificacao('Erro!', 'error'); }
-        } catch(err) { console.error(err); }
+
+    // Exibe o modal de confirmação de exclusão
+    function confirmarExclusaoConsulta(id) {
+        idParaExcluir = id;
+        if (modalExclusao) modalExclusao.show();
+        else if(confirm('Deseja excluir?')) executarExclusao();
     }
+
+    // Executa a exclusão via API
+    if (btnConfirmarExclusao) {
+        btnConfirmarExclusao.addEventListener('click', async () => {
+            if (!idParaExcluir) return;
+            try {
+                const res = await fetch(`/api/consultas/${idParaExcluir}`, { method: 'DELETE' });
+                if(res.ok) { mostrarNotificacao('Excluído com sucesso!'); loadConsultas(); } 
+                else { mostrarNotificacao('Erro ao excluir!', 'error'); }
+            } catch(err) { console.error(err); mostrarNotificacao('Erro de conexão.', 'error'); }
+            modalExclusao.hide();
+        });
+    }
+
     loadConsultas();
 });
